@@ -1,0 +1,9 @@
+# Ignore build artifacts
+bin/
+obj/
+.vs/
+*.user
+*.suo
+
+# But DO include credentials.json for deployment
+!credentials.json
