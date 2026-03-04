@@ -15,6 +15,7 @@ namespace ChurchFacilityManagement.Services
         private const string TASKS_SHEET = "Tasks";
         private const string COMPLETED_SHEET = "Completed Tasks";
         private const string ROLES_SHEET = "Roles";
+        private const string DROPDOWNS_SHEET = "Dropdowns";
 
         public GoogleSheetsService(IConfiguration configuration, ILogger<GoogleSheetsService> logger)
         {
@@ -328,6 +329,45 @@ namespace ChurchFacilityManagement.Services
             {
                 _logger.LogError(ex, "Error reading roles");
                 return new List<Role>();
+            }
+        }
+
+        public async Task<DropdownValues> GetDropdownValuesAsync()
+        {
+            var service = await GetSheetsServiceAsync();
+            var spreadsheetId = _configuration["GoogleSheets:SpreadsheetId"];
+            var range = $"{DROPDOWNS_SHEET}!A2:C";
+
+            var dropdowns = new DropdownValues();
+
+            try
+            {
+                var request = service.Spreadsheets.Values.Get(spreadsheetId, range);
+                var response = await request.ExecuteAsync();
+                var values = response.Values;
+
+                if (values != null && values.Count > 0)
+                {
+                    foreach (var row in values)
+                    {
+                        if (row.Count > 0 && !string.IsNullOrWhiteSpace(row[0].ToString()))
+                            dropdowns.Buildings.Add(row[0].ToString()!.Trim());
+
+                        if (row.Count > 1 && !string.IsNullOrWhiteSpace(row[1].ToString()))
+                            dropdowns.Priorities.Add(row[1].ToString()!.Trim());
+
+                        if (row.Count > 2 && !string.IsNullOrWhiteSpace(row[2].ToString()))
+                            dropdowns.Statuses.Add(row[2].ToString()!.Trim());
+                    }
+                }
+
+                _logger.LogInformation($"Loaded dropdowns: {dropdowns.Buildings.Count} buildings, {dropdowns.Priorities.Count} priorities, {dropdowns.Statuses.Count} statuses");
+                return dropdowns;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error reading dropdown values");
+                return dropdowns;
             }
         }
 

@@ -18,7 +18,8 @@ namespace ChurchFacilityManagement
             app.MapGet("/", async (GoogleSheetsService sheetsService, HttpContext context) =>
             {
                 var requests = await sheetsService.GetAllRequestsAsync();
-                
+                var dropdowns = await sheetsService.GetDropdownValuesAsync();
+
                 var filterStatus = context.Request.Query["status"].ToString();
                 var filterPriority = context.Request.Query["priority"].ToString();
                 var filterBuilding = context.Request.Query["building"].ToString();
@@ -99,26 +100,19 @@ namespace ChurchFacilityManagement
                     <label>Status:</label>
                     <select name='status' onchange='this.form.submit()'>
                         <option value=''>All</option>
-                        <option value='In Progress'" + (filterStatus == "In Progress" ? " selected" : "") + @">In Progress</option>
-                        <option value='Completed'" + (filterStatus == "Completed" ? " selected" : "") + @">Completed</option>
-                        <option value='AWP'" + (filterStatus == "AWP" ? " selected" : "") + @">Awaiting Parts</option>
-                        <option value='AWM'" + (filterStatus == "AWM" ? " selected" : "") + @">Awaiting Maintenance</option>
+                        " + GenerateDropdownOptionsWithSelected(dropdowns.Statuses, filterStatus) + @"
                     </select>
 
                     <label>Priority:</label>
                     <select name='priority' onchange='this.form.submit()'>
                         <option value=''>All</option>
-                        <option value='1'" + (filterPriority == "1" ? " selected" : "") + @">High</option>
-                        <option value='2'" + (filterPriority == "2" ? " selected" : "") + @">Normal</option>
-                        <option value='3'" + (filterPriority == "3" ? " selected" : "") + @">Low</option>
+                        " + GenerateDropdownOptionsWithSelected(dropdowns.Priorities, filterPriority) + @"
                     </select>
 
                     <label>Building:</label>
                     <select name='building' onchange='this.form.submit()'>
                         <option value=''>All</option>
-                        <option value='Main'" + (filterBuilding == "Main" ? " selected" : "") + @">Main</option>
-                        <option value='Worship'" + (filterBuilding == "Worship" ? " selected" : "") + @">Worship</option>
-                        <option value='Education'" + (filterBuilding == "Education" ? " selected" : "") + @">Education</option>
+                        " + GenerateDropdownOptionsWithSelected(dropdowns.Buildings, filterBuilding) + @"
                     </select>
 
                     <label>Search:</label>
@@ -206,9 +200,10 @@ namespace ChurchFacilityManagement
             });
 
             // New request form
-            app.MapGet("/request/new", () =>
+            app.MapGet("/request/new", async (GoogleSheetsService sheetsService) =>
             {
-                var html = GenerateRequestForm(null, "Create New Request", "/request/create");
+                var dropdowns = await sheetsService.GetDropdownValuesAsync();
+                var html = GenerateRequestForm(null, "Create New Request", "/request/create", dropdowns);
                 return Results.Text(html, "text/html");
             });
 
@@ -378,13 +373,14 @@ namespace ChurchFacilityManagement
             app.MapGet("/request/{id}/edit", async (int id, GoogleSheetsService sheetsService) =>
             {
                 var request = await sheetsService.GetRequestByIdAsync(id);
-                
+
                 if (request == null)
                 {
                     return Results.Text("<h1>Request not found</h1><a href='/'>← Back</a>", "text/html");
                 }
 
-                var html = GenerateRequestForm(request, $"Edit Request #{id}", $"/request/{id}/update");
+                var dropdowns = await sheetsService.GetDropdownValuesAsync();
+                var html = GenerateRequestForm(request, $"Edit Request #{id}", $"/request/{id}/update", dropdowns);
                 return Results.Text(html, "text/html");
             });
 
@@ -523,7 +519,7 @@ namespace ChurchFacilityManagement
             app.Run();
         }
 
-        private static string GenerateRequestForm(MaintenanceRequest? request, string title, string action)
+        private static string GenerateRequestForm(MaintenanceRequest? request, string title, string action, DropdownValues dropdowns)
         {
             var isEdit = request != null;
             var req = request ?? new MaintenanceRequest();
@@ -582,33 +578,23 @@ namespace ChurchFacilityManagement
                 <label>Building *</label>
                 <select name='building' required>
                     <option value=''>Select...</option>
-                    <option value='Main'{(req.Building == "Main" ? " selected" : "")}>Main</option>
-                    <option value='Worship'{(req.Building == "Worship" ? " selected" : "")}>Worship</option>
-                    <option value='Education'{(req.Building == "Education" ? " selected" : "")}>Education</option>
-                    <option value='Fellowship'{(req.Building == "Fellowship" ? " selected" : "")}>Fellowship</option>
+                    {GenerateDropdownOptions(dropdowns.Buildings, req.Building)}
                 </select>
             </div>
-            
+
             <div class='form-group'>
                 <label>Priority *</label>
                 <select name='priority' required>
                     <option value=''>Select...</option>
-                    <option value='1'{(req.Priority == "1" ? " selected" : "")}>High</option>
-                    <option value='2'{(req.Priority == "2" ? " selected" : "")}>Normal</option>
-                    <option value='3'{(req.Priority == "3" ? " selected" : "")}>Low</option>
+                    {GenerateDropdownOptions(dropdowns.Priorities, req.Priority)}
                 </select>
             </div>
-            
+
             <div class='form-group'>
                 <label>Status *</label>
                 <select name='status' required>
                     <option value=''>Select...</option>
-                    <option value='In Progress'{(req.Status == "In Progress" ? " selected" : "")}>In Progress</option>
-                    <option value='Completed'{(req.Status == "Completed" ? " selected" : "")}>Completed</option>
-                    <option value='AWP'{(req.Status == "AWP" ? " selected" : "")}>Awaiting Parts</option>
-                    <option value='Waiting on Someone Else'{(req.Status == "Waiting on Someone Else" ? " selected" : "")}>Waiting on Someone Else</option>
-                    <option value='Workday'{(req.Status == "Workday" ? " selected" : "")}>Workday</option>
-                    <option value='AWM'{(req.Status == "AWM" ? " selected" : "")}>Awaiting Maintenance</option>
+                    {GenerateDropdownOptions(dropdowns.Statuses, req.Status)}
                 </select>
             </div>
             
@@ -727,6 +713,28 @@ namespace ChurchFacilityManagement
             }
             html += "</div>";
 
+            return html;
+        }
+
+        private static string GenerateDropdownOptions(List<string> options, string selectedValue)
+        {
+            var html = "";
+            foreach (var option in options)
+            {
+                var selected = option == selectedValue ? " selected" : "";
+                html += $"<option value='{option}'{selected}>{option}</option>";
+            }
+            return html;
+        }
+
+        private static string GenerateDropdownOptionsWithSelected(List<string> options, string selectedValue)
+        {
+            var html = "";
+            foreach (var option in options)
+            {
+                var selected = option == selectedValue ? " selected" : "";
+                html += $"<option value='{option}'{selected}>{option}</option>";
+            }
             return html;
         }
     }
