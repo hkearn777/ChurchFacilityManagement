@@ -102,7 +102,7 @@ namespace ChurchFacilityManagement.Services
             return requests.Any() ? requests.Max(r => r.Id) + 1 : 1;
         }
 
-        public async Task<bool> CreateRequestAsync(MaintenanceRequest request)
+        public async Task<int> CreateRequestAsync(MaintenanceRequest request)
         {
             var service = await GetSheetsServiceAsync();
             var spreadsheetId = _configuration["GoogleSheets:SpreadsheetId"];
@@ -143,12 +143,12 @@ namespace ChurchFacilityManagement.Services
                 await appendRequest.ExecuteAsync();
 
                 _logger.LogInformation($"Created new request with ID: {request.Id}");
-                return true;
+                return request.Id;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error creating maintenance request");
-                return false;
+                return 0;
             }
         }
 

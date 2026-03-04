@@ -10,6 +10,7 @@ namespace ChurchFacilityManagement
             var builder = WebApplication.CreateBuilder(args);
 
             builder.Services.AddSingleton<GoogleSheetsService>();
+            builder.Services.AddSingleton<GoogleDriveService>();
 
             var app = builder.Build();
 
@@ -212,10 +213,10 @@ namespace ChurchFacilityManagement
             });
 
             // Create request
-            app.MapPost("/request/create", async (HttpContext context, GoogleSheetsService sheetsService) =>
+            app.MapPost("/request/create", async (HttpContext context, GoogleSheetsService sheetsService, GoogleDriveService driveService) =>
             {
                 var form = context.Request.Form;
-                
+
                 var request = new MaintenanceRequest
                 {
                     Description = form["description"].ToString(),
@@ -228,10 +229,29 @@ namespace ChurchFacilityManagement
                     Trade = form["trade"].ToString(),
                     CorrectiveAction = form["correctiveAction"].ToString(),
                     DueDate = DateTime.TryParse(form["dueDate"].ToString(), out var dueDate) ? dueDate : null,
-                    Attachments = form["attachments"].ToString()
+                    Attachments = ""
                 };
 
-                await sheetsService.CreateRequestAsync(request);
+                var newId = await sheetsService.CreateRequestAsync(request);
+
+                var files = form.Files.GetFiles("images");
+                if (files.Count > 0)
+                {
+                    var validFiles = files.Take(3).Where(f => f.Length <= 5 * 1024 * 1024).ToList();
+
+                    if (validFiles.Count > 0)
+                    {
+                        var links = await driveService.UploadMultipleImagesAsync(newId, validFiles);
+
+                        if (links.Count > 0)
+                        {
+                            request.Id = newId;
+                            request.Attachments = string.Join(", ", links);
+                            await sheetsService.UpdateRequestAsync(request);
+                        }
+                    }
+                }
+
                 return Results.Redirect("/");
             });
 
@@ -340,7 +360,7 @@ namespace ChurchFacilityManagement
         
         <div class='field'>
             <div class='field-label'>Attachments</div>
-            <div class='field-value'>{(string.IsNullOrEmpty(request.Attachments) ? "None" : $"<a href='{request.Attachments}' target='_blank'>View Attachment</a>")}</div>
+            <div class='field-value'>{GenerateAttachmentsHtml(request.Attachments)}</div>
         </div>
         
         <div class='actions'>
@@ -369,14 +389,14 @@ namespace ChurchFacilityManagement
             });
 
             // Update request
-            app.MapPost("/request/{id}/update", async (int id, HttpContext context, GoogleSheetsService sheetsService) =>
+            app.MapPost("/request/{id}/update", async (int id, HttpContext context, GoogleSheetsService sheetsService, GoogleDriveService driveService) =>
             {
                 var request = await sheetsService.GetRequestByIdAsync(id);
                 if (request == null)
                     return Results.Redirect("/");
 
                 var form = context.Request.Form;
-                
+
                 request.Description = form["description"].ToString();
                 request.RequestedBy = form["requestedBy"].ToString();
                 request.RequestMethod = form["requestMethod"].ToString();
@@ -389,7 +409,27 @@ namespace ChurchFacilityManagement
                 request.DueDate = DateTime.TryParse(form["dueDate"].ToString(), out var dueDate) ? dueDate : null;
                 request.StartDate = DateTime.TryParse(form["startDate"].ToString(), out var startDate) ? startDate : null;
                 request.CompletedDate = DateTime.TryParse(form["completedDate"].ToString(), out var completedDate) ? completedDate : null;
-                request.Attachments = form["attachments"].ToString();
+
+                var files = form.Files.GetFiles("images");
+                if (files.Count > 0)
+                {
+                    var validFiles = files.Take(3).Where(f => f.Length <= 5 * 1024 * 1024).ToList();
+
+                    if (validFiles.Count > 0)
+                    {
+                        var links = await driveService.UploadMultipleImagesAsync(id, validFiles);
+
+                        if (links.Count > 0)
+                        {
+                            var existingLinks = string.IsNullOrEmpty(request.Attachments) 
+                                ? new List<string>() 
+                                : request.Attachments.Split(',').Select(l => l.Trim()).ToList();
+
+                            existingLinks.AddRange(links);
+                            request.Attachments = string.Join(", ", existingLinks);
+                        }
+                    }
+                }
 
                 await sheetsService.UpdateRequestAsync(request);
                 return Results.Redirect($"/request/{id}");
@@ -515,8 +555,8 @@ namespace ChurchFacilityManagement
     <div class='container'>
         <a href='/' class='back-link'>← Back to List</a>
         <h1>{title}</h1>
-        
-        <form method='post' action='{action}'>
+
+        <form method='post' action='{action}' enctype='multipart/form-data'>
             <div class='form-group'>
                 <label>Description *</label>
                 <textarea name='description' required>{req.Description}</textarea>
@@ -611,8 +651,10 @@ namespace ChurchFacilityManagement
             </div>" : "")}
             
             <div class='form-group'>
-                <label>Attachments (Google Drive Link)</label>
-                <input type='url' name='attachments' value='{req.Attachments}' placeholder='https://drive.google.com/...'>
+                <label>Attachments (Upload Images)</label>
+                <input type='file' name='images' accept='image/*' capture='environment' multiple>
+                <small style='color: #666; display: block; margin-top: 5px;'>Upload up to 3 images (5MB each max). On mobile, use camera to capture photos.</small>
+                {(isEdit && !string.IsNullOrEmpty(req.Attachments) ? $"<div style='margin-top: 10px;'><strong>Current:</strong> <a href='{req.Attachments}' target='_blank'>View Attachments</a></div>" : "")}
             </div>
             
             <div>
@@ -664,8 +706,28 @@ namespace ChurchFacilityManagement
         {
             if (string.IsNullOrEmpty(text) || text.Length <= maxLength)
                 return text;
-            
+
             return text.Substring(0, maxLength) + "...";
+        }
+
+        private static string GenerateAttachmentsHtml(string attachments)
+        {
+            if (string.IsNullOrEmpty(attachments))
+                return "None";
+
+            var links = attachments.Split(',').Select(l => l.Trim()).Where(l => !string.IsNullOrEmpty(l)).ToList();
+
+            if (links.Count == 0)
+                return "None";
+
+            var html = "<div>";
+            for (int i = 0; i < links.Count; i++)
+            {
+                html += $"<div style='margin-bottom: 8px;'><a href='{links[i]}' target='_blank' style='color: #4285f4;'>📷 Image {i + 1}</a></div>";
+            }
+            html += "</div>";
+
+            return html;
         }
     }
 }
