@@ -24,16 +24,21 @@ namespace ChurchFacilityManagement
                 var filterPriority = context.Request.Query["priority"].ToString();
                 var filterBuilding = context.Request.Query["building"].ToString();
                 var searchText = context.Request.Query["search"].ToString();
+                var sortOrder = context.Request.Query["sort"].ToString();
+
+                // Default to ascending (oldest first) if not specified
+                if (string.IsNullOrEmpty(sortOrder))
+                    sortOrder = "asc";
 
                 if (!string.IsNullOrEmpty(filterStatus))
                     requests = requests.Where(r => r.Status.Equals(filterStatus, StringComparison.OrdinalIgnoreCase)).ToList();
-                
+
                 if (!string.IsNullOrEmpty(filterPriority))
                     requests = requests.Where(r => r.Priority.Equals(filterPriority, StringComparison.OrdinalIgnoreCase)).ToList();
-                
+
                 if (!string.IsNullOrEmpty(filterBuilding))
                     requests = requests.Where(r => r.Building.Equals(filterBuilding, StringComparison.OrdinalIgnoreCase)).ToList();
-                
+
                 if (!string.IsNullOrEmpty(searchText))
                     requests = requests.Where(r => 
                         r.Description.Contains(searchText, StringComparison.OrdinalIgnoreCase) ||
@@ -91,6 +96,9 @@ namespace ChurchFacilityManagement
             <div>
                 <a href='/request/new' class='btn btn-success'>+ New Request</a>
                 <a href='/reports' class='btn'>📊 Reports</a>
+                <a href='/?sort=" + (sortOrder == "asc" ? "desc" : "asc") + (string.IsNullOrEmpty(filterStatus) ? "" : "&status=" + filterStatus) + (string.IsNullOrEmpty(filterPriority) ? "" : "&priority=" + filterPriority) + (string.IsNullOrEmpty(filterBuilding) ? "" : "&building=" + filterBuilding) + (string.IsNullOrEmpty(searchText) ? "" : "&search=" + searchText) + @"' class='btn' title='Toggle sort order'>
+                    " + (sortOrder == "asc" ? "📅 Oldest First ▲" : "📅 Newest First ▼") + @"
+                </a>
             </div>
         </div>
 
@@ -144,7 +152,11 @@ namespace ChurchFacilityManagement
                 }
                 else
                 {
-                    foreach (var req in requests.OrderByDescending(r => r.ReportDate))
+                    var sortedRequests = sortOrder == "asc" 
+                        ? requests.OrderBy(r => r.ReportDate) 
+                        : requests.OrderByDescending(r => r.ReportDate);
+
+                    foreach (var req in sortedRequests)
                     {
                         var priorityClass = req.Priority switch
                         {
