@@ -211,6 +211,154 @@ namespace ChurchFacilityManagement
                 return Results.Text(html, "text/html");
             });
 
+            // Requestor route - Simplified form for regular users
+            app.MapGet("/requestor/new", async (GoogleSheetsService sheetsService) =>
+            {
+                var dropdowns = await sheetsService.GetDropdownValuesAsync();
+                var html = GenerateRequestorForm(dropdowns);
+                return Results.Text(html, "text/html");
+            });
+
+            // Requestor form submission
+            app.MapPost("/requestor/create", async (HttpContext context, GoogleSheetsService sheetsService, GoogleDriveService driveService) =>
+            {
+                var form = context.Request.Form;
+
+                var request = new MaintenanceRequest
+                {
+                    Description = form["description"].ToString(),
+                    RequestedBy = form["requestedBy"].ToString(),
+                    RequestMethod = "Inspection",
+                    Building = form["building"].ToString(),
+                    Priority = "",
+                    Status = "Submitted",
+                    Assigned = "",
+                    Trade = "",
+                    CorrectiveAction = "",
+                    DueDate = null,
+                    Attachments = ""
+                };
+
+                var newId = await sheetsService.CreateRequestAsync(request);
+
+                var files = form.Files.GetFiles("images");
+                if (files.Count > 0)
+                {
+                    var validFiles = files.Take(3).Where(f => f.Length <= 5 * 1024 * 1024).ToList();
+
+                    if (validFiles.Count > 0)
+                    {
+                        var links = await driveService.UploadMultipleImagesAsync(newId, validFiles);
+
+                        if (links.Count > 0)
+                        {
+                            request.Id = newId;
+                            request.Attachments = string.Join(", ", links);
+                            await sheetsService.UpdateRequestAsync(request);
+                        }
+                    }
+                }
+
+                return Results.Text(@"
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset='UTF-8'>
+    <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+    <title>Request Submitted</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; background: #f5f5f5; text-align: center; }
+        .container { max-width: 600px; margin: 50px auto; background: white; padding: 40px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        h1 { color: #34a853; }
+        .btn { display: inline-block; margin-top: 20px; padding: 10px 20px; background: #4285f4; color: white; text-decoration: none; border-radius: 4px; }
+        .btn:hover { background: #3367d6; }
+    </style>
+</head>
+<body>
+    <div class='container'>
+        <h1>✅ Request Submitted Successfully!</h1>
+        <p>Your maintenance request has been submitted and will be reviewed by our team.</p>
+        <p>Request ID: <strong>" + newId + @"</strong></p>
+        <a href='/requestor/new' class='btn'>Submit Another Request</a>
+    </div>
+</body>
+</html>", "text/html");
+            });
+
+            // Proxy route - Similar to Requestor but with Request Method dropdown
+            app.MapGet("/proxy/new", async (GoogleSheetsService sheetsService) =>
+            {
+                var dropdowns = await sheetsService.GetDropdownValuesAsync();
+                var html = GenerateProxyForm(dropdowns);
+                return Results.Text(html, "text/html");
+            });
+
+            // Proxy form submission
+            app.MapPost("/proxy/create", async (HttpContext context, GoogleSheetsService sheetsService, GoogleDriveService driveService) =>
+            {
+                var form = context.Request.Form;
+
+                var request = new MaintenanceRequest
+                {
+                    Description = form["description"].ToString(),
+                    RequestedBy = form["requestedBy"].ToString(),
+                    RequestMethod = form["requestMethod"].ToString(),
+                    Building = form["building"].ToString(),
+                    Priority = "",
+                    Status = "Submitted",
+                    Assigned = "",
+                    Trade = "",
+                    CorrectiveAction = "",
+                    DueDate = null,
+                    Attachments = ""
+                };
+
+                var newId = await sheetsService.CreateRequestAsync(request);
+
+                var files = form.Files.GetFiles("images");
+                if (files.Count > 0)
+                {
+                    var validFiles = files.Take(3).Where(f => f.Length <= 5 * 1024 * 1024).ToList();
+
+                    if (validFiles.Count > 0)
+                    {
+                        var links = await driveService.UploadMultipleImagesAsync(newId, validFiles);
+
+                        if (links.Count > 0)
+                        {
+                            request.Id = newId;
+                            request.Attachments = string.Join(", ", links);
+                            await sheetsService.UpdateRequestAsync(request);
+                        }
+                    }
+                }
+
+                return Results.Text(@"
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset='UTF-8'>
+    <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+    <title>Request Submitted</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; background: #f5f5f5; text-align: center; }
+        .container { max-width: 600px; margin: 50px auto; background: white; padding: 40px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        h1 { color: #34a853; }
+        .btn { display: inline-block; margin-top: 20px; padding: 10px 20px; background: #4285f4; color: white; text-decoration: none; border-radius: 4px; }
+        .btn:hover { background: #3367d6; }
+    </style>
+</head>
+<body>
+    <div class='container'>
+        <h1>✅ Request Submitted Successfully!</h1>
+        <p>The maintenance request has been submitted and will be reviewed by the management team.</p>
+        <p>Request ID: <strong>" + newId + @"</strong></p>
+        <a href='/proxy/new' class='btn'>Submit Another Request</a>
+    </div>
+</body>
+</html>", "text/html");
+            });
+
             // New request form
             app.MapGet("/request/new", async (GoogleSheetsService sheetsService) =>
             {
@@ -260,6 +408,135 @@ namespace ChurchFacilityManagement
                 }
 
                 return Results.Redirect("/");
+            });
+
+            // Approver Dashboard - Shows only requests needing approval
+            app.MapGet("/approver", async (GoogleSheetsService sheetsService) =>
+            {
+                var allRequests = await sheetsService.GetAllRequestsAsync();
+                var requestsNeedingApproval = allRequests.Where(r => r.Status.Equals("Need Approval", StringComparison.OrdinalIgnoreCase)).ToList();
+
+                var html = @"
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset='UTF-8'>
+    <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+    <title>Approver Dashboard</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; background: #f5f5f5; margin: 0; }
+        .container { max-width: 1400px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        h1 { color: #333; font-size: 1.8em; margin-top: 0; }
+        .count-badge { display: inline-block; background: #fbbc04; color: white; padding: 5px 15px; border-radius: 20px; font-size: 0.9em; margin-left: 10px; }
+        .table-wrapper { overflow-x: auto; margin-top: 20px; }
+        table { border-collapse: collapse; width: 100%; }
+        th { background: #4285f4; color: white; padding: 12px 8px; text-align: left; font-size: 0.85em; }
+        td { padding: 10px 8px; border: 1px solid #ddd; font-size: 0.85em; }
+        tr:hover { background: #f8f9fa; }
+        .btn { display: inline-block; padding: 8px 16px; color: white; text-decoration: none; border-radius: 4px; border: none; font-size: 0.85em; cursor: pointer; margin-right: 5px; }
+        .btn-approve { background: #34a853; }
+        .btn-approve:hover { background: #2d8e47; }
+        .btn-reject { background: #d93025; }
+        .btn-reject:hover { background: #b52a1f; }
+        .btn-view { background: #4285f4; }
+        .btn-view:hover { background: #3367d6; }
+        .empty-state { text-align: center; padding: 40px; color: #666; }
+        .empty-state h2 { color: #34a853; }
+        @media (max-width: 768px) {
+            body { padding: 10px; }
+            .container { padding: 15px; }
+            table { font-size: 0.75em; }
+        }
+    </style>
+</head>
+<body>
+    <div class='container'>
+        <h1>🔍 Approver Dashboard<span class='count-badge'>" + requestsNeedingApproval.Count + @" Pending</span></h1>";
+
+                if (requestsNeedingApproval.Count == 0)
+                {
+                    html += @"
+        <div class='empty-state'>
+            <h2>✅ All Caught Up!</h2>
+            <p>There are no requests pending approval at this time.</p>
+        </div>";
+                }
+                else
+                {
+                    html += @"
+        <div class='table-wrapper'>
+            <table>
+                <tr>
+                    <th>ID</th>
+                    <th>Report Date</th>
+                    <th>Description</th>
+                    <th>Requested By</th>
+                    <th>Building</th>
+                    <th>Priority</th>
+                    <th>Actions</th>
+                </tr>";
+
+                    foreach (var req in requestsNeedingApproval.OrderBy(r => r.ReportDate))
+                    {
+                        var priorityText = req.Priority switch
+                        {
+                            "1" => "High",
+                            "2" => "Normal",
+                            "3" => "Low",
+                            _ => req.Priority
+                        };
+
+                        html += $@"
+                <tr>
+                    <td>{req.Id}</td>
+                    <td>{req.ReportDate:yyyy-MM-dd}</td>
+                    <td>{TruncateText(req.Description, 50)}</td>
+                    <td>{req.RequestedBy}</td>
+                    <td>{req.Building}</td>
+                    <td>{priorityText}</td>
+                    <td>
+                        <a href='/request/{req.Id}' class='btn btn-view'>View</a>
+                        <a href='/approver/approve/{req.Id}' class='btn btn-approve' onclick='return confirm(""Approve this request?"")'>✅ Approve</a>
+                        <a href='/approver/reject/{req.Id}' class='btn btn-reject' onclick='return confirm(""Mark as Not Approved?"")'>❌ Not Approve</a>
+                    </td>
+                </tr>";
+                    }
+
+                    html += @"
+            </table>
+        </div>";
+                }
+
+                html += @"
+    </div>
+</body>
+</html>";
+
+                return Results.Text(html, "text/html");
+            });
+
+            // Approve a request
+            app.MapGet("/approver/approve/{id}", async (int id, GoogleSheetsService sheetsService) =>
+            {
+                var request = await sheetsService.GetRequestByIdAsync(id);
+                if (request != null)
+                {
+                    request.Status = "Approved";
+                    await sheetsService.UpdateRequestAsync(request);
+                }
+                return Results.Redirect("/approver");
+            });
+
+            // Reject a request
+            app.MapGet("/approver/reject/{id}", async (int id, GoogleSheetsService sheetsService) =>
+            {
+                var request = await sheetsService.GetRequestByIdAsync(id);
+                if (request != null)
+                {
+                    request.Status = "Not Approved";
+                    await sheetsService.UpdateRequestAsync(request);
+                }
+                return Results.Redirect("/approver");
             });
 
             // View request details
@@ -748,6 +1025,145 @@ namespace ChurchFacilityManagement
                 html += $"<option value='{option}'{selected}>{option}</option>";
             }
             return html;
+        }
+
+        private static string GenerateRequestorForm(DropdownValues dropdowns)
+        {
+            return $@"
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset='UTF-8'>
+    <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+    <title>Submit Maintenance Request</title>
+    <style>
+        body {{ font-family: Arial, sans-serif; padding: 20px; background: #f5f5f5; }}
+        .container {{ max-width: 700px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }}
+        h1 {{ color: #333; margin-top: 0; }}
+        .info {{ background: #e3f2fd; padding: 15px; border-radius: 4px; margin-bottom: 20px; color: #1565c0; }}
+        .form-group {{ margin-bottom: 20px; }}
+        .form-group label {{ display: block; font-weight: bold; margin-bottom: 5px; color: #666; }}
+        .form-group input, .form-group select, .form-group textarea {{ width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; font-size: 1em; }}
+        .form-group textarea {{ min-height: 120px; resize: vertical; }}
+        .btn {{ padding: 12px 30px; background: #34a853; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 1em; font-weight: bold; }}
+        .btn:hover {{ background: #2d8e47; }}
+        small {{ color: #666; display: block; margin-top: 5px; }}
+    </style>
+</head>
+<body>
+    <div class='container'>
+        <h1>🛠️ Submit Maintenance Request</h1>
+        <div class='info'>
+            <strong>Instructions:</strong> Please describe the maintenance issue and we'll review it promptly.
+        </div>
+
+        <form method='post' action='/requestor/create' enctype='multipart/form-data'>
+            <div class='form-group'>
+                <label>What needs to be fixed? *</label>
+                <textarea name='description' required placeholder='Describe the maintenance issue in detail...'></textarea>
+            </div>
+
+            <div class='form-group'>
+                <label>Your Name *</label>
+                <input type='text' name='requestedBy' required placeholder='Enter your name'>
+            </div>
+
+            <div class='form-group'>
+                <label>Building Location *</label>
+                <select name='building' required>
+                    <option value=''>Select a building...</option>
+                    {GenerateDropdownOptions(dropdowns.Buildings, "")}
+                </select>
+            </div>
+
+            <div class='form-group'>
+                <label>Attach Photos (Optional)</label>
+                <input type='file' name='images' accept='image/*' capture='environment' multiple>
+                <small>You can upload up to 3 photos (5MB each max)</small>
+            </div>
+
+            <div>
+                <button type='submit' class='btn'>Submit Request</button>
+            </div>
+        </form>
+    </div>
+</body>
+</html>";
+        }
+
+        private static string GenerateProxyForm(DropdownValues dropdowns)
+        {
+            return $@"
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset='UTF-8'>
+    <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+    <title>Submit Request (Proxy)</title>
+    <style>
+        body {{ font-family: Arial, sans-serif; padding: 20px; background: #f5f5f5; }}
+        .container {{ max-width: 700px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }}
+        h1 {{ color: #333; margin-top: 0; }}
+        .info {{ background: #fff3cd; padding: 15px; border-radius: 4px; margin-bottom: 20px; color: #856404; }}
+        .form-group {{ margin-bottom: 20px; }}
+        .form-group label {{ display: block; font-weight: bold; margin-bottom: 5px; color: #666; }}
+        .form-group input, .form-group select, .form-group textarea {{ width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; font-size: 1em; }}
+        .form-group textarea {{ min-height: 120px; resize: vertical; }}
+        .btn {{ padding: 12px 30px; background: #4285f4; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 1em; font-weight: bold; }}
+        .btn:hover {{ background: #3367d6; }}
+        small {{ color: #666; display: block; margin-top: 5px; }}
+    </style>
+</head>
+<body>
+    <div class='container'>
+        <h1>📝 Submit Request (Proxy)</h1>
+        <div class='info'>
+            <strong>Proxy Mode:</strong> You are entering a request on behalf of someone else.
+        </div>
+
+        <form method='post' action='/proxy/create' enctype='multipart/form-data'>
+            <div class='form-group'>
+                <label>Maintenance Issue Description *</label>
+                <textarea name='description' required placeholder='Describe the maintenance issue...'></textarea>
+            </div>
+
+            <div class='form-group'>
+                <label>Requested By (Person's Name) *</label>
+                <input type='text' name='requestedBy' required placeholder='Enter the requestor name'>
+            </div>
+
+            <div class='form-group'>
+                <label>Request Method *</label>
+                <select name='requestMethod' required>
+                    <option value=''>How was this request received?</option>
+                    <option value='Email'>Email</option>
+                    <option value='Verbal'>Verbal (Phone/In-Person)</option>
+                    <option value='Proxy'>Written Note/Form</option>
+                    <option value='Inspection'>Inspection</option>
+                </select>
+            </div>
+
+            <div class='form-group'>
+                <label>Building Location *</label>
+                <select name='building' required>
+                    <option value=''>Select a building...</option>
+                    {GenerateDropdownOptions(dropdowns.Buildings, "")}
+                </select>
+            </div>
+
+            <div class='form-group'>
+                <label>Attach Photos (Optional)</label>
+                <input type='file' name='images' accept='image/*' capture='environment' multiple>
+                <small>You can upload up to 3 photos (5MB each max)</small>
+            </div>
+
+            <div>
+                <button type='submit' class='btn'>Submit Request</button>
+            </div>
+        </form>
+    </div>
+</body>
+</html>";
         }
     }
 }
