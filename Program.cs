@@ -10,7 +10,7 @@ namespace ChurchFacilityManagement
             var builder = WebApplication.CreateBuilder(args);
 
             builder.Services.AddSingleton<GoogleSheetsService>();
-            builder.Services.AddSingleton<GoogleDriveService>();
+            builder.Services.AddSingleton<DropboxService>();
 
             var app = builder.Build();
 
@@ -220,7 +220,7 @@ namespace ChurchFacilityManagement
             });
 
             // Requestor form submission
-            app.MapPost("/requestor/create", async (HttpContext context, GoogleSheetsService sheetsService, GoogleDriveService driveService) =>
+            app.MapPost("/requestor/create", async (HttpContext context, GoogleSheetsService sheetsService, DropboxService dropboxService) =>
             {
                 var form = context.Request.Form;
 
@@ -248,13 +248,17 @@ namespace ChurchFacilityManagement
 
                     if (validFiles.Count > 0)
                     {
-                        var links = await driveService.UploadMultipleImagesAsync(newId, validFiles);
+                        var links = await dropboxService.UploadMultipleImagesAsync(newId, validFiles);
 
                         if (links.Count > 0)
                         {
-                            request.Id = newId;
-                            request.Attachments = string.Join(", ", links);
-                            await sheetsService.UpdateRequestAsync(request);
+                            // Fetch the request to get the RowNumber
+                            var createdRequest = await sheetsService.GetRequestByIdAsync(newId);
+                            if (createdRequest != null)
+                            {
+                                createdRequest.Attachments = string.Join(", ", links);
+                                await sheetsService.UpdateRequestAsync(createdRequest);
+                            }
                         }
                     }
                 }
@@ -294,7 +298,7 @@ namespace ChurchFacilityManagement
             });
 
             // Proxy form submission
-            app.MapPost("/proxy/create", async (HttpContext context, GoogleSheetsService sheetsService, GoogleDriveService driveService) =>
+            app.MapPost("/proxy/create", async (HttpContext context, GoogleSheetsService sheetsService, DropboxService dropboxService) =>
             {
                 var form = context.Request.Form;
 
@@ -322,13 +326,17 @@ namespace ChurchFacilityManagement
 
                     if (validFiles.Count > 0)
                     {
-                        var links = await driveService.UploadMultipleImagesAsync(newId, validFiles);
+                        var links = await dropboxService.UploadMultipleImagesAsync(newId, validFiles);
 
                         if (links.Count > 0)
                         {
-                            request.Id = newId;
-                            request.Attachments = string.Join(", ", links);
-                            await sheetsService.UpdateRequestAsync(request);
+                            // Fetch the request to get the RowNumber
+                            var createdRequest = await sheetsService.GetRequestByIdAsync(newId);
+                            if (createdRequest != null)
+                            {
+                                createdRequest.Attachments = string.Join(", ", links);
+                                await sheetsService.UpdateRequestAsync(createdRequest);
+                            }
                         }
                     }
                 }
@@ -368,7 +376,7 @@ namespace ChurchFacilityManagement
             });
 
             // Create request
-            app.MapPost("/request/create", async (HttpContext context, GoogleSheetsService sheetsService, GoogleDriveService driveService) =>
+            app.MapPost("/request/create", async (HttpContext context, GoogleSheetsService sheetsService, DropboxService dropboxService) =>
             {
                 var form = context.Request.Form;
 
@@ -396,13 +404,17 @@ namespace ChurchFacilityManagement
 
                     if (validFiles.Count > 0)
                     {
-                        var links = await driveService.UploadMultipleImagesAsync(newId, validFiles);
+                        var links = await dropboxService.UploadMultipleImagesAsync(newId, validFiles);
 
                         if (links.Count > 0)
                         {
-                            request.Id = newId;
-                            request.Attachments = string.Join(", ", links);
-                            await sheetsService.UpdateRequestAsync(request);
+                            // Fetch the request to get the RowNumber
+                            var createdRequest = await sheetsService.GetRequestByIdAsync(newId);
+                            if (createdRequest != null)
+                            {
+                                createdRequest.Attachments = string.Join(", ", links);
+                                await sheetsService.UpdateRequestAsync(createdRequest);
+                            }
                         }
                     }
                 }
@@ -674,7 +686,7 @@ namespace ChurchFacilityManagement
             });
 
             // Update request
-            app.MapPost("/request/{id}/update", async (int id, HttpContext context, GoogleSheetsService sheetsService, GoogleDriveService driveService) =>
+            app.MapPost("/request/{id}/update", async (int id, HttpContext context, GoogleSheetsService sheetsService, DropboxService dropboxService) =>
             {
                 var request = await sheetsService.GetRequestByIdAsync(id);
                 if (request == null)
@@ -696,13 +708,14 @@ namespace ChurchFacilityManagement
                 request.CompletedDate = DateTime.TryParse(form["completedDate"].ToString(), out var completedDate) ? completedDate : null;
 
                 var files = form.Files.GetFiles("images");
+
                 if (files.Count > 0)
                 {
                     var validFiles = files.Take(3).Where(f => f.Length <= 5 * 1024 * 1024).ToList();
 
                     if (validFiles.Count > 0)
                     {
-                        var links = await driveService.UploadMultipleImagesAsync(id, validFiles);
+                        var links = await dropboxService.UploadMultipleImagesAsync(id, validFiles);
 
                         if (links.Count > 0)
                         {
@@ -919,19 +932,19 @@ namespace ChurchFacilityManagement
                 <label>Start Date</label>
                 <input type='date' name='startDate' value='{(req.StartDate.HasValue ? req.StartDate.Value.ToString("yyyy-MM-dd") : "")}'>
             </div>
-            
+
             <div class='form-group'>
                 <label>Completed Date</label>
                 <input type='date' name='completedDate' value='{(req.CompletedDate.HasValue ? req.CompletedDate.Value.ToString("yyyy-MM-dd") : "")}'>
             </div>" : "")}
-            
+
             <div class='form-group'>
                 <label>Attachments (Upload Images)</label>
-                <input type='file' name='images' accept='image/*' capture='environment' multiple>
-                <small style='color: #666; display: block; margin-top: 5px;'>Upload up to 3 images (5MB each max). On mobile, use camera to capture photos.</small>
+                <input type='file' name='images' accept='image/*' multiple>
+                <small style='color: #666; display: block; margin-top: 5px;'>Upload up to 3 images (5MB each max). On mobile, choose camera or gallery.</small>
                 {(isEdit && !string.IsNullOrEmpty(req.Attachments) ? $"<div style='margin-top: 10px;'><strong>Current:</strong> <a href='{req.Attachments}' target='_blank'>View Attachments</a></div>" : "")}
             </div>
-            
+
             <div>
                 <button type='submit' class='btn'>{(isEdit ? "Update" : "Create")} Request</button>
                 <a href='/' class='btn btn-secondary'>Cancel</a>
@@ -1078,7 +1091,7 @@ namespace ChurchFacilityManagement
 
             <div class='form-group'>
                 <label>Attach Photos (Optional)</label>
-                <input type='file' name='images' accept='image/*' capture='environment' multiple>
+                <input type='file' name='images' accept='image/*' multiple>
                 <small>You can upload up to 3 photos (5MB each max)</small>
             </div>
 
@@ -1153,7 +1166,7 @@ namespace ChurchFacilityManagement
 
             <div class='form-group'>
                 <label>Attach Photos (Optional)</label>
-                <input type='file' name='images' accept='image/*' capture='environment' multiple>
+                <input type='file' name='images' accept='image/*' multiple>
                 <small>You can upload up to 3 photos (5MB each max)</small>
             </div>
 

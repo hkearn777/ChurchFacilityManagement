@@ -2,6 +2,8 @@
 credentials.json
 appsettings.Development.json
 *.pfx
+.env.*
+*.env
 
 ## User-specific files
 *.rsuser
