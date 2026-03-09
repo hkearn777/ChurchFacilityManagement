@@ -11,6 +11,7 @@ namespace ChurchFacilityManagement
 
             builder.Services.AddSingleton<GoogleSheetsService>();
             builder.Services.AddSingleton<DropboxService>();
+            builder.Services.AddSingleton<EmailService>();
 
             var app = builder.Build();
 
@@ -686,7 +687,7 @@ namespace ChurchFacilityManagement
             });
 
             // Update request
-            app.MapPost("/request/{id}/update", async (int id, HttpContext context, GoogleSheetsService sheetsService, DropboxService dropboxService) =>
+            app.MapPost("/request/{id}/update", async (int id, HttpContext context, GoogleSheetsService sheetsService, DropboxService dropboxService, EmailService emailService) =>
             {
                 var request = await sheetsService.GetRequestByIdAsync(id);
                 if (request == null)
@@ -694,12 +695,15 @@ namespace ChurchFacilityManagement
 
                 var form = context.Request.Form;
 
+                var oldStatus = request.Status;
+                var newStatus = form["status"].ToString();
+
                 request.Description = form["description"].ToString();
                 request.RequestedBy = form["requestedBy"].ToString();
                 request.RequestMethod = form["requestMethod"].ToString();
                 request.Building = form["building"].ToString();
                 request.Priority = form["priority"].ToString();
-                request.Status = form["status"].ToString();
+                request.Status = newStatus;
                 request.Assigned = form["assigned"].ToString();
                 request.Trade = form["trade"].ToString();
                 request.CorrectiveAction = form["correctiveAction"].ToString();
@@ -730,6 +734,12 @@ namespace ChurchFacilityManagement
                 }
 
                 await sheetsService.UpdateRequestAsync(request);
+
+                if (oldStatus != "Need Approval" && newStatus == "Need Approval")
+                {
+                    await emailService.SendApprovalNotificationAsync(request.Id, request.Description, request.RequestedBy);
+                }
+
                 return Results.Redirect($"/request/{id}");
             });
 
