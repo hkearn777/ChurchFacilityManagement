@@ -10,6 +10,7 @@ namespace ChurchFacilityManagement.Services
     {
         private readonly IConfiguration _configuration;
         private readonly ILogger<GoogleSheetsService> _logger;
+        private readonly DropboxService _dropboxService;
         private SheetsService? _sheetsService;
 
         private const string TASKS_SHEET = "Tasks";
@@ -17,10 +18,11 @@ namespace ChurchFacilityManagement.Services
         private const string ROLES_SHEET = "Roles";
         private const string DROPDOWNS_SHEET = "Dropdowns";
 
-        public GoogleSheetsService(IConfiguration configuration, ILogger<GoogleSheetsService> logger)
+        public GoogleSheetsService(IConfiguration configuration, ILogger<GoogleSheetsService> logger, DropboxService dropboxService)
         {
             _configuration = configuration;
             _logger = logger;
+            _dropboxService = dropboxService;
         }
 
         private async Task<SheetsService> GetSheetsServiceAsync()
@@ -210,6 +212,16 @@ namespace ChurchFacilityManagement.Services
                 var request = await GetRequestByIdAsync(id);
                 if (request == null)
                     return false;
+
+                // Delete associated Dropbox files before deleting the request
+                try
+                {
+                    await _dropboxService.DeleteImagesForRequestAsync(id, request.Attachments);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, $"Error deleting Dropbox files for request ID: {id}. Continuing with request deletion.");
+                }
 
                 var deleteRequest = new BatchUpdateSpreadsheetRequest
                 {

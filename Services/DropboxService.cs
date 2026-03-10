@@ -140,5 +140,60 @@ namespace ChurchFacilityManagement.Services
 
             return links;
         }
+
+        public async Task DeleteImagesForRequestAsync(int requestId, string? attachmentLinks)
+        {
+            if (string.IsNullOrWhiteSpace(attachmentLinks))
+            {
+                _logger.LogInformation($"No attachments to delete for request ID: {requestId}");
+                return;
+            }
+
+            var client = await GetDropboxClientAsync();
+
+            // Split links by comma or semicolon
+            var links = attachmentLinks.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries)
+                                      .Select(l => l.Trim())
+                                      .Where(l => !string.IsNullOrEmpty(l))
+                                      .ToList();
+
+            foreach (var link in links)
+            {
+                try
+                {
+                    // Extract the file path from the Dropbox shared link
+                    // Dropbox shared links typically look like: https://www.dropbox.com/s/...?dl=0
+                    // We need to get the actual file path from the metadata
+
+                    // First, try to construct the path directly from the requestId pattern
+                    var fileName = $"{requestId}_";
+                    var possiblePath = $"{ROOT_FOLDER}/{fileName}";
+
+                    // List files in the root folder and find files matching this request ID
+                    var listResult = await client.Files.ListFolderAsync(ROOT_FOLDER);
+                    var filesToDelete = listResult.Entries
+                        .Where(e => e.IsFile && e.Name.StartsWith(fileName))
+                        .ToList();
+
+                    foreach (var file in filesToDelete)
+                    {
+                        try
+                        {
+                            await client.Files.DeleteV2Async(file.PathLower);
+                            _logger.LogInformation($"Deleted file: {file.Name} for request ID: {requestId}");
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogError(ex, $"Error deleting file {file.Name} for request ID: {requestId}");
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, $"Error processing link {link} for request ID: {requestId}");
+                    // Continue with other files even if one fails
+                }
+            }
+        }
     }
 }
