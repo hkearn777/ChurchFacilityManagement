@@ -27,9 +27,54 @@ else {
 }
 Write-Host ""
 
-# Dropbox access token and email setup
-Write-Host "[2/2] Preparing environment variables..." -ForegroundColor Green
-$dropboxToken = "sl.u.AGXQbBm0uxDK19U1r5qJpE5P0odZek15njKeGjfxJkL8PCX64vkQXh4LODRELhNodvQKbRzO5CJHFp9K0l2xJk0DIZ9nRv7oNIUF8Kv4CBIFs4UxQNvH1jrlUYBsZ6vshdojC9x-MxXc_Vj002pbQ1EwE5BRLYdt20b8NJBZd7pjjLy415iikNTincn0E_bGJtij3cDvpjp3YDHgcidTMBDvUOLle5uHsDO3IraEYh195t9Tlutr-fPUIpflp4z-hpvHzdgMRkwGDd3yLej4tqDZrzP7GV5aDK1OKkA9aa8muBeBkZYDBaaxAjRovx1iJBsMaWu00JQSPe8Ej8ie9AaitGAui97GE2GB8BleqUL0LYUufnszI5DZgXs-Wnap7nJjuDU0R3aK4PLu61N0cujMVKUyjgU6GeY5UaDRH24jH16kTuR3ckMr6zGUd9Y9JzB6YDBTRyQxni3AKGCqCMB5aN0YXc59qe9byDtX9EwTRmAVOLQR50-r_1ksAbd4pfugSTB21OeJCD7EzFVsoT4uO1xlulTBwjAh1-I3V3CcQSpIkWHO3IY7lNAu874ERkgNPQHJcv1ym-0UiVSU0wjL0N_0xZGqpzLilRWMpB25PB2DEsnX9R_J2sfH7Hc1lRnyPqrLty2C_nBkaRMNT5nPzqDL8KfpBuQsWbHvyVe0Ww-pUmgErXHNFjOxt-L_UFtAoWd6o4d5GuTG9EP4nRzylGOvajTCk69MquZPCwxvhAVDsaCG2916goh1mIXoOgqoVQyTe4Hlp_YGoI5lEsoKQmZdk04ucyAEaStpUTG6dqaza9CvBOoM8MzSbDARbb6L_A2sLwy2QIJkE01vFGcnbr5KGZWwx8Td9VulfNiD71pHxcf9feh4FEL4b0g8NhDXeEgU0yvJiXKkJMoMEm6SJ_xxBqqM1o1BDC3_NUAtPhchxEpZVV7gO7ikozKF0y8W7_TfAOpVOxSdAGjAe0J8Oyr7FSy5jWzY21CMCPJiHfw9HFBXldvbSMlxESbF5-SLLOml37fptpOdxnQVtGfifQpq5VRm7M3miekHrwulMf7sk2s2Zh3-4TcfJskys5FEw28-Ugb4Kuys5Nms8D55aHkiTl7g9eDL6HH8L_inDYve8U7ejmUW_b8k9uKgcvl1Dz7tqzF7TVXAspRfLGxh6Q56_hWxC-m7pjjBgv4wn6mi3RTU9Lwc3fg1df8zvj5rAZxThRhtF-317Y0OgdCo3pUlAvV5l81HXJqiaPY9e9UWSvEChqrNY7TGBnmjNeqIEblYxlcKy4i9n4N6tCy0zs2dKa7b9Kh94XbQ0LpN1w"
+# Retrieve secrets from Google Cloud Secret Manager
+Write-Host "[2/2] Retrieving secrets from Google Cloud Secret Manager..." -ForegroundColor Green
+Write-Host ""
+
+# Try to retrieve Dropbox access token from Secret Manager
+Write-Host "Checking for Dropbox access token in Secret Manager..." -ForegroundColor Cyan
+$dropboxToken = $null
+try {
+    $dropboxToken = gcloud secrets versions access latest --secret="cfm-dropbox-token" 2>$null
+    if ($LASTEXITCODE -eq 0 -and ![string]::IsNullOrWhiteSpace($dropboxToken)) {
+        Write-Host "      Dropbox token retrieved from Secret Manager" -ForegroundColor Green
+    } else {
+        throw "Secret not found"
+    }
+} catch {
+    Write-Host "      Secret not found. Let's set it up now!" -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "==================================================================" -ForegroundColor Cyan
+    Write-Host "  ONE-TIME SETUP: Store Dropbox Access Token in Secret Manager" -ForegroundColor Cyan
+    Write-Host "==================================================================" -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "To get a Dropbox access token:" -ForegroundColor White
+    Write-Host "1. Go to https://www.dropbox.com/developers/apps" -ForegroundColor Gray
+    Write-Host "2. Select your app (or create one)" -ForegroundColor Gray
+    Write-Host "3. Go to 'Permissions' tab and enable 'files.content.write' and 'sharing.write'" -ForegroundColor Gray
+    Write-Host "4. Go to 'Settings' tab and generate an access token" -ForegroundColor Gray
+    Write-Host "   NOTE: Use 'Generate access token' in the OAuth 2 section for a long-lived token" -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "Paste your Dropbox access token:" -ForegroundColor White
+    Write-Host "(This will be stored securely in Google Cloud)" -ForegroundColor Gray
+    $dropboxTokenSecure = Read-Host -AsSecureString
+    $dropboxToken = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($dropboxTokenSecure))
+
+    Write-Host ""
+    Write-Host "Storing token in Secret Manager..." -ForegroundColor Cyan
+    $dropboxToken | gcloud secrets create cfm-dropbox-token --data-file=-
+
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "      Token stored successfully!" -ForegroundColor Green
+        Write-Host "      Future deployments will use this automatically" -ForegroundColor Gray
+    } else {
+        Write-Host "      ERROR: Failed to store token" -ForegroundColor Red
+        Write-Host ""
+        Write-Host "Press any key to exit..."
+        $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+        exit 1
+    }
+}
 
 Write-Host ""
 Write-Host "Checking for email password in Secret Manager..." -ForegroundColor Cyan
@@ -72,8 +117,9 @@ try {
 }
 
 Write-Host ""
-Write-Host "      Dropbox token configured" -ForegroundColor Gray
-Write-Host "      Email notifications enabled" -ForegroundColor Green
+Write-Host "      All secrets configured!" -ForegroundColor Green
+Write-Host "      - Dropbox OAuth: Ready" -ForegroundColor Gray
+Write-Host "      - Email password: Ready" -ForegroundColor Gray
 Write-Host ""
 
 # Deploy to Cloud Run
@@ -81,13 +127,20 @@ Write-Host "Deploying to Google Cloud Run..." -ForegroundColor Green
 Write-Host "This may take 3-5 minutes..." -ForegroundColor Gray
 Write-Host ""
 
-# Deploy - credentials.json will be copied by Dockerfile, pass Dropbox token and email password as env vars
+# Build environment variables
+$envVars = "Email__FromPassword=$emailPasswordPlain,DROPBOX_APP_KEY=$dropboxAppKey,DROPBOX_APP_SECRET=$dropboxAppSecret,DROPBOX_REDIRECT_URI=https://church-facility-management-902794624514.us-central1.run.app/dropbox/callback"
+
+if (![string]::IsNullOrWhiteSpace($dropboxRefreshToken)) {
+    $envVars += ",DROPBOX_REFRESH_TOKEN=$dropboxRefreshToken"
+}
+
+# Deploy - credentials.json will be copied by Dockerfile
 gcloud run deploy church-facility-management `
   --source . `
   --platform managed `
   --region us-central1 `
   --allow-unauthenticated `
-  --set-env-vars "DROPBOX_ACCESS_TOKEN=$dropboxToken,Email__FromPassword=$emailPasswordPlain"
+  --set-env-vars $envVars
 
 if ($LASTEXITCODE -eq 0) {
     Write-Host ""
@@ -99,6 +152,19 @@ if ($LASTEXITCODE -eq 0) {
     Write-Host ""
     Write-Host "Your application is now live at:" -ForegroundColor Yellow
     Write-Host "https://church-facility-management-902794624514.us-central1.run.app" -ForegroundColor Cyan
+
+    if ([string]::IsNullOrWhiteSpace($dropboxRefreshToken)) {
+        Write-Host ""
+        Write-Host "==================================================================" -ForegroundColor Yellow
+        Write-Host "  NEXT STEP: Complete Dropbox OAuth Setup" -ForegroundColor Yellow
+        Write-Host "==================================================================" -ForegroundColor Yellow
+        Write-Host ""
+        Write-Host "1. Visit: https://church-facility-management-902794624514.us-central1.run.app/dropbox/setup" -ForegroundColor Cyan
+        Write-Host "2. Click 'Authorize Dropbox'" -ForegroundColor White
+        Write-Host "3. Follow the instructions to save the refresh token" -ForegroundColor White
+        Write-Host "4. Re-run this deployment script" -ForegroundColor White
+        Write-Host ""
+    }
 } else {
     Write-Host ""
     Write-Host "  X DEPLOYMENT FAILED - Check errors above" -ForegroundColor Red

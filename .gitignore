@@ -1,6 +1,8 @@
 ## Sensitive files - DO NOT COMMIT TO GITHUB
 credentials.json
 appsettings.Development.json
+CFMEmailAppPassword.txt
+dropbox_tokens.json
 *.pfx
 .env.*
 *.env

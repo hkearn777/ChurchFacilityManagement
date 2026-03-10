@@ -10,10 +10,133 @@ namespace ChurchFacilityManagement
             var builder = WebApplication.CreateBuilder(args);
 
             builder.Services.AddSingleton<GoogleSheetsService>();
+            builder.Services.AddSingleton<DropboxOAuthService>();
             builder.Services.AddSingleton<DropboxService>();
             builder.Services.AddSingleton<EmailService>();
 
             var app = builder.Build();
+
+            // Dropbox OAuth endpoints
+            app.MapGet("/dropbox/setup", async (DropboxOAuthService oauthService) =>
+            {
+                try
+                {
+                    var authUrl = oauthService.GetAuthorizationUrl();
+
+                    var html = $@"
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Dropbox Setup</title>
+    <style>
+        body {{ font-family: Arial, sans-serif; padding: 40px; background: #f5f5f5; }}
+        .container {{ max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }}
+        h1 {{ color: #333; }}
+        .btn {{ display: inline-block; padding: 12px 24px; background: #4285f4; color: white; text-decoration: none; border-radius: 4px; font-size: 1em; }}
+        .btn:hover {{ background: #3367d6; }}
+        p {{ line-height: 1.6; }}
+    </style>
+</head>
+<body>
+    <div class='container'>
+        <h1>🔐 Dropbox OAuth Setup</h1>
+        <p>Click the button below to authorize this application to access your Dropbox account.</p>
+        <p>This is a one-time setup that will provide a refresh token for ongoing access.</p>
+        <a href='{authUrl}' class='btn'>Authorize Dropbox</a>
+    </div>
+</body>
+</html>";
+                    return Results.Content(html, "text/html");
+                }
+                catch (Exception ex)
+                {
+                    return Results.Content($@"
+<!DOCTYPE html>
+<html>
+<head><title>Error</title></head>
+<body>
+    <h1>Configuration Error</h1>
+    <p>{ex.Message}</p>
+    <p>Make sure DROPBOX_APP_KEY, DROPBOX_APP_SECRET, and DROPBOX_REDIRECT_URI are configured.</p>
+</body>
+</html>", "text/html");
+                }
+            });
+
+            app.MapGet("/dropbox/callback", async (HttpContext context, DropboxOAuthService oauthService) =>
+            {
+                var code = context.Request.Query["code"].ToString();
+                var error = context.Request.Query["error"].ToString();
+
+                if (!string.IsNullOrEmpty(error))
+                {
+                    return Results.Content($@"
+<!DOCTYPE html>
+<html>
+<head><title>Authorization Failed</title></head>
+<body>
+    <h1>❌ Authorization Failed</h1>
+    <p>Error: {error}</p>
+    <a href='/dropbox/setup'>Try Again</a>
+</body>
+</html>", "text/html");
+                }
+
+                try
+                {
+                    var tokens = await oauthService.ExchangeCodeForTokenAsync(code);
+
+                    var html = $@"
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Dropbox Setup Complete</title>
+    <style>
+        body {{ font-family: Arial, sans-serif; padding: 40px; background: #f5f5f5; }}
+        .container {{ max-width: 700px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }}
+        h1 {{ color: #34a853; }}
+        .success {{ background: #e6f4ea; padding: 15px; border-radius: 4px; margin: 20px 0; }}
+        .token-box {{ background: #f8f9fa; padding: 15px; border-radius: 4px; font-family: monospace; word-break: break-all; margin: 15px 0; }}
+        .btn {{ display: inline-block; padding: 10px 20px; background: #4285f4; color: white; text-decoration: none; border-radius: 4px; }}
+        .warning {{ background: #fef7e0; padding: 15px; border-radius: 4px; margin: 20px 0; }}
+    </style>
+</head>
+<body>
+    <div class='container'>
+        <h1>✅ Dropbox Setup Complete!</h1>
+        <div class='success'>
+            <p><strong>Your refresh token has been obtained and saved.</strong></p>
+            <p>For local development, the token is saved in 'dropbox_tokens.json'.</p>
+        </div>
+
+        <div class='warning'>
+            <p><strong>📋 For Cloud Deployment:</strong></p>
+            <p>Save this refresh token to Google Cloud Secret Manager:</p>
+            <div class='token-box'>{tokens.RefreshToken}</div>
+            <p>Run this command:</p>
+            <pre style='background: #333; color: #0f0; padding: 10px; border-radius: 4px; overflow-x: auto;'>echo ""{tokens.RefreshToken}"" | gcloud secrets create cfm-dropbox-refresh-token --data-file=-</pre>
+        </div>
+
+        <a href='/' class='btn'>Go to Home</a>
+    </div>
+</body>
+</html>";
+                    return Results.Content(html, "text/html");
+                }
+                catch (Exception ex)
+                {
+                    return Results.Content($@"
+<!DOCTYPE html>
+<html>
+<head><title>Error</title></head>
+<body>
+    <h1>❌ Token Exchange Failed</h1>
+    <p>{ex.Message}</p>
+    <a href='/dropbox/setup'>Try Again</a>
+</body>
+</html>", "text/html");
+                }
+            });
 
             // Home page - List all requests
             app.MapGet("/", async (GoogleSheetsService sheetsService, HttpContext context) =>
@@ -221,7 +344,7 @@ namespace ChurchFacilityManagement
             });
 
             // Requestor form submission
-            app.MapPost("/requestor/create", async (HttpContext context, GoogleSheetsService sheetsService, DropboxService dropboxService) =>
+            app.MapPost("/requestor/create", async (HttpContext context, GoogleSheetsService sheetsService, DropboxService dropboxService, EmailService emailService) =>
             {
                 var form = context.Request.Form;
 
@@ -241,6 +364,8 @@ namespace ChurchFacilityManagement
                 };
 
                 var newId = await sheetsService.CreateRequestAsync(request);
+                var imageUploadError = "";
+                var imageUploadSuccess = false;
 
                 var files = form.Files.GetFiles("images");
                 if (files.Count > 0)
@@ -249,22 +374,59 @@ namespace ChurchFacilityManagement
 
                     if (validFiles.Count > 0)
                     {
-                        var links = await dropboxService.UploadMultipleImagesAsync(newId, validFiles);
-
-                        if (links.Count > 0)
+                        try
                         {
-                            // Fetch the request to get the RowNumber
+                            var links = await dropboxService.UploadMultipleImagesAsync(newId, validFiles);
+
+                            if (links.Count > 0)
+                            {
+                                // Fetch the request to get the RowNumber
+                                var createdRequest = await sheetsService.GetRequestByIdAsync(newId);
+                                if (createdRequest != null)
+                                {
+                                    createdRequest.Attachments = string.Join(", ", links);
+                                    await sheetsService.UpdateRequestAsync(createdRequest);
+                                    imageUploadSuccess = true;
+                                }
+                            }
+                            else
+                            {
+                                imageUploadError = "No images were uploaded successfully. Please check file sizes and formats.";
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            imageUploadError = $"Image upload failed: {ex.Message}";
+
+                            // Store error in Attachments column
                             var createdRequest = await sheetsService.GetRequestByIdAsync(newId);
                             if (createdRequest != null)
                             {
-                                createdRequest.Attachments = string.Join(", ", links);
+                                createdRequest.Attachments = $"IMAGE UPLOAD FAILED: {ex.Message}";
                                 await sheetsService.UpdateRequestAsync(createdRequest);
+                            }
+
+                            // Send error notification to Manager
+                            var roles = await sheetsService.GetRolesAsync();
+                            var manager = roles.FirstOrDefault(r => r.RoleName.Equals("Manager", StringComparison.OrdinalIgnoreCase));
+                            if (manager != null && !string.IsNullOrEmpty(manager.Contact))
+                            {
+                                await emailService.SendImageUploadErrorNotificationAsync(newId, request.Description, request.RequestedBy, ex.Message, manager.Contact);
                             }
                         }
                     }
                 }
 
-                return Results.Text(@"
+                var statusMessage = imageUploadSuccess 
+                    ? "Request submitted successfully with images!" 
+                    : !string.IsNullOrEmpty(imageUploadError) 
+                        ? $"Request created, but image upload failed" 
+                        : "Request submitted successfully!";
+
+                var statusColor = imageUploadSuccess ? "#34a853" : !string.IsNullOrEmpty(imageUploadError) ? "#fbbc04" : "#34a853";
+                var statusIcon = imageUploadSuccess ? "✅" : !string.IsNullOrEmpty(imageUploadError) ? "⚠️" : "✅";
+
+                return Results.Text($@"
 <!DOCTYPE html>
 <html>
 <head>
@@ -272,18 +434,27 @@ namespace ChurchFacilityManagement
     <meta name='viewport' content='width=device-width, initial-scale=1.0'>
     <title>Request Submitted</title>
     <style>
-        body { font-family: Arial, sans-serif; padding: 20px; background: #f5f5f5; text-align: center; }
-        .container { max-width: 600px; margin: 50px auto; background: white; padding: 40px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        h1 { color: #34a853; }
-        .btn { display: inline-block; margin-top: 20px; padding: 10px 20px; background: #4285f4; color: white; text-decoration: none; border-radius: 4px; }
-        .btn:hover { background: #3367d6; }
+        body {{ font-family: Arial, sans-serif; padding: 20px; background: #f5f5f5; text-align: center; }}
+        .container {{ max-width: 600px; margin: 50px auto; background: white; padding: 40px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }}
+        h1 {{ color: {statusColor}; }}
+        .error-box {{ background: #fef7e0; border-left: 4px solid #fbbc04; padding: 15px; margin: 20px 0; text-align: left; border-radius: 4px; }}
+        .error-box p {{ margin: 5px 0; color: #5f4b00; }}
+        .btn {{ display: inline-block; margin-top: 20px; padding: 10px 20px; background: #4285f4; color: white; text-decoration: none; border-radius: 4px; }}
+        .btn:hover {{ background: #3367d6; }}
     </style>
 </head>
 <body>
     <div class='container'>
-        <h1>✅ Request Submitted Successfully!</h1>
+        <h1>{statusIcon} {statusMessage}</h1>
         <p>Your maintenance request has been submitted and will be reviewed by our team.</p>
-        <p>Request ID: <strong>" + newId + @"</strong></p>
+        <p>Request ID: <strong>{newId}</strong></p>
+        {(!string.IsNullOrEmpty(imageUploadError) ? $@"
+        <div class='error-box'>
+            <p><strong>⚠️ Image Upload Issue:</strong></p>
+            <p>{imageUploadError}</p>
+            <p><strong>Don't worry - your request details have been saved.</strong> You can contact the facilities manager to add images later.</p>
+            <p style='margin-top: 10px; font-size: 0.9em; color: #666;'>The facility manager has been notified of this issue.</p>
+        </div>" : "")}
         <a href='/requestor/new' class='btn'>Submit Another Request</a>
     </div>
 </body>
@@ -299,7 +470,7 @@ namespace ChurchFacilityManagement
             });
 
             // Proxy form submission
-            app.MapPost("/proxy/create", async (HttpContext context, GoogleSheetsService sheetsService, DropboxService dropboxService) =>
+            app.MapPost("/proxy/create", async (HttpContext context, GoogleSheetsService sheetsService, DropboxService dropboxService, EmailService emailService) =>
             {
                 var form = context.Request.Form;
 
@@ -319,6 +490,8 @@ namespace ChurchFacilityManagement
                 };
 
                 var newId = await sheetsService.CreateRequestAsync(request);
+                var imageUploadError = "";
+                var imageUploadSuccess = false;
 
                 var files = form.Files.GetFiles("images");
                 if (files.Count > 0)
@@ -327,22 +500,59 @@ namespace ChurchFacilityManagement
 
                     if (validFiles.Count > 0)
                     {
-                        var links = await dropboxService.UploadMultipleImagesAsync(newId, validFiles);
-
-                        if (links.Count > 0)
+                        try
                         {
-                            // Fetch the request to get the RowNumber
+                            var links = await dropboxService.UploadMultipleImagesAsync(newId, validFiles);
+
+                            if (links.Count > 0)
+                            {
+                                // Fetch the request to get the RowNumber
+                                var createdRequest = await sheetsService.GetRequestByIdAsync(newId);
+                                if (createdRequest != null)
+                                {
+                                    createdRequest.Attachments = string.Join(", ", links);
+                                    await sheetsService.UpdateRequestAsync(createdRequest);
+                                    imageUploadSuccess = true;
+                                }
+                            }
+                            else
+                            {
+                                imageUploadError = "No images were uploaded successfully. Please check file sizes and formats.";
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            imageUploadError = $"Image upload failed: {ex.Message}";
+
+                            // Store error in Attachments column
                             var createdRequest = await sheetsService.GetRequestByIdAsync(newId);
                             if (createdRequest != null)
                             {
-                                createdRequest.Attachments = string.Join(", ", links);
+                                createdRequest.Attachments = $"IMAGE UPLOAD FAILED: {ex.Message}";
                                 await sheetsService.UpdateRequestAsync(createdRequest);
+                            }
+
+                            // Send error notification to Manager
+                            var roles = await sheetsService.GetRolesAsync();
+                            var manager = roles.FirstOrDefault(r => r.RoleName.Equals("Manager", StringComparison.OrdinalIgnoreCase));
+                            if (manager != null && !string.IsNullOrEmpty(manager.Contact))
+                            {
+                                await emailService.SendImageUploadErrorNotificationAsync(newId, request.Description, request.RequestedBy, ex.Message, manager.Contact);
                             }
                         }
                     }
                 }
 
-                return Results.Text(@"
+                var statusMessage = imageUploadSuccess 
+                    ? "Request submitted successfully with images!" 
+                    : !string.IsNullOrEmpty(imageUploadError) 
+                        ? $"Request created, but image upload failed: {imageUploadError}" 
+                        : "Request submitted successfully!";
+
+                var statusColor = imageUploadSuccess ? "#34a853" : !string.IsNullOrEmpty(imageUploadError) ? "#fbbc04" : "#34a853";
+                var statusIcon = imageUploadSuccess ? "✅" : !string.IsNullOrEmpty(imageUploadError) ? "⚠️" : "✅";
+
+                return Results.Text($@"
 <!DOCTYPE html>
 <html>
 <head>
@@ -350,18 +560,26 @@ namespace ChurchFacilityManagement
     <meta name='viewport' content='width=device-width, initial-scale=1.0'>
     <title>Request Submitted</title>
     <style>
-        body { font-family: Arial, sans-serif; padding: 20px; background: #f5f5f5; text-align: center; }
-        .container { max-width: 600px; margin: 50px auto; background: white; padding: 40px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        h1 { color: #34a853; }
-        .btn { display: inline-block; margin-top: 20px; padding: 10px 20px; background: #4285f4; color: white; text-decoration: none; border-radius: 4px; }
-        .btn:hover { background: #3367d6; }
+        body {{ font-family: Arial, sans-serif; padding: 20px; background: #f5f5f5; text-align: center; }}
+        .container {{ max-width: 600px; margin: 50px auto; background: white; padding: 40px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }}
+        h1 {{ color: {statusColor}; }}
+        .error-box {{ background: #fef7e0; border-left: 4px solid #fbbc04; padding: 15px; margin: 20px 0; text-align: left; border-radius: 4px; }}
+        .error-box p {{ margin: 5px 0; color: #5f4b00; }}
+        .btn {{ display: inline-block; margin-top: 20px; padding: 10px 20px; background: #4285f4; color: white; text-decoration: none; border-radius: 4px; }}
+        .btn:hover {{ background: #3367d6; }}
     </style>
 </head>
 <body>
     <div class='container'>
-        <h1>✅ Request Submitted Successfully!</h1>
-        <p>The maintenance request has been submitted and will be reviewed by the management team.</p>
-        <p>Request ID: <strong>" + newId + @"</strong></p>
+        <h1>{statusIcon} {statusMessage}</h1>
+        <p>Request ID: <strong>{newId}</strong></p>
+        {(!string.IsNullOrEmpty(imageUploadError) ? $@"
+        <div class='error-box'>
+            <p><strong>⚠️ Image Upload Issue:</strong></p>
+            <p>{imageUploadError}</p>
+            <p><strong>Your request data has been saved.</strong> You can edit the request later to add images.</p>
+            <p style='margin-top: 10px; font-size: 0.9em; color: #666;'>The facility manager has been notified of this issue.</p>
+        </div>" : "")}
         <a href='/proxy/new' class='btn'>Submit Another Request</a>
     </div>
 </body>
@@ -377,7 +595,7 @@ namespace ChurchFacilityManagement
             });
 
             // Create request
-            app.MapPost("/request/create", async (HttpContext context, GoogleSheetsService sheetsService, DropboxService dropboxService) =>
+            app.MapPost("/request/create", async (HttpContext context, GoogleSheetsService sheetsService, DropboxService dropboxService, EmailService emailService) =>
             {
                 var form = context.Request.Form;
 
@@ -397,6 +615,7 @@ namespace ChurchFacilityManagement
                 };
 
                 var newId = await sheetsService.CreateRequestAsync(request);
+                var imageUploadError = "";
 
                 var files = form.Files.GetFiles("images");
                 if (files.Count > 0)
@@ -405,19 +624,79 @@ namespace ChurchFacilityManagement
 
                     if (validFiles.Count > 0)
                     {
-                        var links = await dropboxService.UploadMultipleImagesAsync(newId, validFiles);
-
-                        if (links.Count > 0)
+                        try
                         {
-                            // Fetch the request to get the RowNumber
+                            var links = await dropboxService.UploadMultipleImagesAsync(newId, validFiles);
+
+                            if (links.Count > 0)
+                            {
+                                // Fetch the request to get the RowNumber
+                                var createdRequest = await sheetsService.GetRequestByIdAsync(newId);
+                                if (createdRequest != null)
+                                {
+                                    createdRequest.Attachments = string.Join(", ", links);
+                                    await sheetsService.UpdateRequestAsync(createdRequest);
+                                }
+                            }
+                            else
+                            {
+                                imageUploadError = "No images were uploaded successfully.";
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            imageUploadError = $"Image upload error: {ex.Message}";
+
+                            // Store error in Attachments column
                             var createdRequest = await sheetsService.GetRequestByIdAsync(newId);
                             if (createdRequest != null)
                             {
-                                createdRequest.Attachments = string.Join(", ", links);
+                                createdRequest.Attachments = $"IMAGE UPLOAD FAILED: {ex.Message}";
                                 await sheetsService.UpdateRequestAsync(createdRequest);
+                            }
+
+                            // Send error notification to Manager
+                            var roles = await sheetsService.GetRolesAsync();
+                            var manager = roles.FirstOrDefault(r => r.RoleName.Equals("Manager", StringComparison.OrdinalIgnoreCase));
+                            if (manager != null && !string.IsNullOrEmpty(manager.Contact))
+                            {
+                                await emailService.SendImageUploadErrorNotificationAsync(newId, request.Description, request.RequestedBy, ex.Message, manager.Contact);
                             }
                         }
                     }
+                }
+
+                // Redirect to home with error message if needed
+                if (!string.IsNullOrEmpty(imageUploadError))
+                {
+                    return Results.Text($@"
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset='UTF-8'>
+    <meta http-equiv='refresh' content='5;url=/'>
+    <title>Request Created</title>
+    <style>
+        body {{ font-family: Arial, sans-serif; padding: 20px; background: #f5f5f5; text-align: center; }}
+        .container {{ max-width: 600px; margin: 50px auto; background: white; padding: 40px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }}
+        h1 {{ color: #fbbc04; }}
+        .error-box {{ background: #fef7e0; border-left: 4px solid #fbbc04; padding: 15px; margin: 20px 0; text-align: left; border-radius: 4px; }}
+        .error-box p {{ margin: 5px 0; color: #5f4b00; }}
+    </style>
+</head>
+<body>
+    <div class='container'>
+        <h1>⚠️ Request Created with Warning</h1>
+        <p>Request ID: <strong>{newId}</strong></p>
+        <div class='error-box'>
+            <p><strong>Image Upload Failed:</strong></p>
+            <p>{imageUploadError}</p>
+            <p style='margin-top: 10px;'><strong>Request data saved successfully.</strong> You can edit the request to add images later.</p>
+        </div>
+        <p>Redirecting to home page in 5 seconds...</p>
+    </div>
+</body>
+</html>", "text/html");
                 }
 
                 return Results.Redirect("/");

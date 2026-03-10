@@ -8,50 +8,59 @@ namespace ChurchFacilityManagement.Services
     {
         private readonly IConfiguration _configuration;
         private readonly ILogger<DropboxService> _logger;
+        private readonly DropboxOAuthService _oauthService;
         private DropboxClient? _dropboxClient;
         private const string ROOT_FOLDER = "/MaintenanceImages";
 
-        public DropboxService(IConfiguration configuration, ILogger<DropboxService> logger)
+        public DropboxService(
+            IConfiguration configuration, 
+            ILogger<DropboxService> logger,
+            DropboxOAuthService oauthService)
         {
             _configuration = configuration;
             _logger = logger;
+            _oauthService = oauthService;
         }
 
-        private DropboxClient GetDropboxClient()
+        private async Task<DropboxClient> GetDropboxClientAsync()
         {
-            if (_dropboxClient != null)
-                return _dropboxClient;
+            // Try to get valid tokens via OAuth (refresh token flow)
+            var tokens = await _oauthService.GetValidTokensAsync();
 
-            // Check environment variable first (for Cloud Run deployment)
+            if (tokens != null && !string.IsNullOrEmpty(tokens.AccessToken))
+            {
+                _logger.LogInformation("Using Dropbox access token from OAuth refresh token");
+                _dropboxClient = new DropboxClient(tokens.AccessToken);
+                return _dropboxClient;
+            }
+
+            // Fallback: Check environment variable for direct access token (backward compatibility)
             var accessToken = Environment.GetEnvironmentVariable("DROPBOX_ACCESS_TOKEN");
 
             if (!string.IsNullOrEmpty(accessToken))
             {
-                _logger.LogInformation("Using Dropbox access token from environment variable");
+                _logger.LogInformation("Using Dropbox access token from environment variable (fallback)");
+                _dropboxClient = new DropboxClient(accessToken);
+                return _dropboxClient;
             }
-            else
+
+            // Last fallback: appsettings.json (for legacy local development)
+            accessToken = _configuration["Dropbox:AccessToken"];
+            if (!string.IsNullOrEmpty(accessToken))
             {
-                // Fall back to appsettings.json (for local development)
-                accessToken = _configuration["Dropbox:AccessToken"];
-                _logger.LogInformation("Using Dropbox access token from appsettings.json");
+                _logger.LogInformation("Using Dropbox access token from appsettings.json (fallback)");
+                _dropboxClient = new DropboxClient(accessToken);
+                return _dropboxClient;
             }
 
-            if (string.IsNullOrEmpty(accessToken))
-            {
-                var errorMsg = "Dropbox access token not found in environment variable or appsettings.json";
-                _logger.LogError(errorMsg);
-                throw new Exception(errorMsg);
-            }
-
-            _dropboxClient = new DropboxClient(accessToken);
-            _logger.LogInformation("Dropbox client initialized successfully");
-
-            return _dropboxClient;
+            var errorMsg = "Dropbox not configured. Please run OAuth setup or set DROPBOX_REFRESH_TOKEN";
+            _logger.LogError(errorMsg);
+            throw new Exception(errorMsg);
         }
 
         public async Task<string> UploadImageAsync(int requestId, IFormFile file)
         {
-            var client = GetDropboxClient();
+            var client = await GetDropboxClientAsync();
 
             // Create filename with request ID prefix
             var fileName = $"{requestId}_{file.FileName}";

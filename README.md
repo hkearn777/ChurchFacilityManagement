@@ -92,6 +92,86 @@ dotnet run
 
 The app will be available at: `http://localhost:5118`
 
+## Deployment to Google Cloud Run
+
+### One-Time Setup
+
+1. Install [Google Cloud SDK](https://cloud.google.com/sdk/docs/install)
+2. Authenticate: `gcloud auth login`
+3. Set your project: `gcloud config set project YOUR_PROJECT_ID`
+
+### Deploy
+
+Run the deployment script:
+
+```powershell
+.\Deploy-CFM.ps1
+```
+
+The script will:
+1. Verify your `credentials.json` file exists
+2. Prompt you to set up secrets in Google Cloud Secret Manager (first deployment only):
+   - **Dropbox Access Token**
+   - **Gmail App Password**
+3. Deploy the application to Cloud Run
+4. Display your live application URL
+
+**On subsequent deployments**, the script will automatically retrieve secrets from Secret Manager.
+
+### Updating Secrets
+
+If you need to update a secret (e.g., new Dropbox token):
+
+```bash
+# Update Dropbox token
+echo "YOUR_NEW_TOKEN" | gcloud secrets versions add cfm-dropbox-token --data-file=-
+
+# Update email password
+echo "YOUR_NEW_PASSWORD" | gcloud secrets versions add cfm-email-password --data-file=-
+```
+
+## Troubleshooting
+
+### "expired_access_token" Error
+
+If you see this error when uploading images to Dropbox:
+1. Your Dropbox access token has expired
+2. Generate a new token from the [Dropbox App Console](https://www.dropbox.com/developers/apps)
+3. Update the secret: `echo "NEW_TOKEN" | gcloud secrets versions add cfm-dropbox-token --data-file=-`
+4. Redeploy: `.\Deploy-CFM.ps1`
+
+For local development, update the environment variable:
+- Windows: Run `.\Setup-LocalEnvironment.ps1` as Administrator
+- Or manually: `$env:DROPBOX_ACCESS_TOKEN = "your_new_token"`
+
+### Images Not Uploading Locally
+
+Ensure the `DROPBOX_ACCESS_TOKEN` environment variable is set:
+```powershell
+# Check if set
+echo $env:DROPBOX_ACCESS_TOKEN
+
+# Set it (current session only)
+$env:DROPBOX_ACCESS_TOKEN = "your_token_here"
+
+# Or run the setup script
+.\Setup-LocalEnvironment.ps1
+```
+
+### Email Notifications Not Working
+
+Ensure the `Email__FromPassword` environment variable is set (note the double underscore):
+```powershell
+# Check if set
+echo $env:Email__FromPassword
+
+# Set it (current session only)
+$env:Email__FromPassword = "your_app_password"
+
+# Or run the setup script
+.\Setup-LocalEnvironment.ps1
+```
+
 ## Usage
 
 ### Creating Requests
@@ -163,9 +243,9 @@ ChurchFacilityManagement/
 
 ## Future Enhancements
 
-- [ ] Email/SMS notifications
+- [x] Email/SMS notifications
+- [x] File upload support (Dropbox integration)
 - [ ] User authentication and role-based permissions
-- [ ] File upload support (not just links)
 - [ ] Dashboard with charts/graphs
 - [ ] Export to PDF
 - [ ] Calendar view for due dates
