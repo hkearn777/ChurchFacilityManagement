@@ -361,7 +361,7 @@ namespace ChurchFacilityManagement.Services
         {
             var service = await GetSheetsServiceAsync();
             var spreadsheetId = _configuration["GoogleSheets:SpreadsheetId"];
-            var range = $"{DROPDOWNS_SHEET}!A2:C";
+            var range = $"{DROPDOWNS_SHEET}!A2:D";
 
             var dropdowns = new DropdownValues();
 
@@ -383,10 +383,13 @@ namespace ChurchFacilityManagement.Services
 
                         if (row.Count > 2 && !string.IsNullOrWhiteSpace(row[2].ToString()))
                             dropdowns.Statuses.Add(row[2].ToString()!.Trim());
+
+                        if (row.Count > 3 && !string.IsNullOrWhiteSpace(row[3].ToString()))
+                            dropdowns.RequestMethods.Add(row[3].ToString()!.Trim());
                     }
                 }
 
-                _logger.LogInformation($"Loaded dropdowns: {dropdowns.Buildings.Count} buildings, {dropdowns.Priorities.Count} priorities, {dropdowns.Statuses.Count} statuses");
+                _logger.LogInformation($"Loaded dropdowns: {dropdowns.Buildings.Count} buildings, {dropdowns.Priorities.Count} priorities, {dropdowns.Statuses.Count} statuses, {dropdowns.RequestMethods.Count} request methods");
                 return dropdowns;
             }
             catch (Exception ex)

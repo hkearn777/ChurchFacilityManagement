@@ -24,7 +24,7 @@ namespace ChurchFacilityManagement.Services
                 var fromPassword = _configuration["Email:FromPassword"];
                 var replyToEmail = _configuration["Email:ReplyToEmail"];
                 var toEmail = _configuration["Email:ApproverEmail"];
-                var approverPageUrl = _configuration["Email:ApproverPageUrl"];
+                var approverPageUrl = _configuration["Email:ApproverPageUrl"] ?? "";
 
                 if (string.IsNullOrEmpty(fromEmail) || string.IsNullOrEmpty(fromPassword) || string.IsNullOrEmpty(toEmail))
                 {

@@ -1158,10 +1158,7 @@ namespace ChurchFacilityManagement
                 <label>Request Method *</label>
                 <select name='requestMethod' required>
                     <option value=''>Select...</option>
-                    <option value='Inspection'{(req.RequestMethod == "Inspection" ? " selected" : "")}>Inspection</option>
-                    <option value='Verbal'{(req.RequestMethod == "Verbal" ? " selected" : "")}>Verbal</option>
-                    <option value='Email'{(req.RequestMethod == "Email" ? " selected" : "")}>Email</option>
-                    <option value='Proxy'{(req.RequestMethod == "Proxy" ? " selected" : "")}>Proxy</option>
+                    {GenerateDropdownOptions(dropdowns.RequestMethods, req.RequestMethod)}
                 </select>
             </div>
             
@@ -1438,10 +1435,7 @@ namespace ChurchFacilityManagement
                 <label>Request Method *</label>
                 <select name='requestMethod' required>
                     <option value=''>How was this request received?</option>
-                    <option value='Email'>Email</option>
-                    <option value='Verbal'>Verbal (Phone/In-Person)</option>
-                    <option value='Proxy'>Written Note/Form</option>
-                    <option value='Inspection'>Inspection</option>
+                    {GenerateDropdownOptions(dropdowns.RequestMethods, "")}
                 </select>
             </div>
 
