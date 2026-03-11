@@ -352,7 +352,7 @@ namespace ChurchFacilityManagement
                 {
                     Description = form["description"].ToString(),
                     RequestedBy = form["requestedBy"].ToString(),
-                    RequestMethod = "Inspection",
+                    RequestMethod = "Web App",
                     Building = form["building"].ToString(),
                     Priority = "",
                     Status = "Submitted",
