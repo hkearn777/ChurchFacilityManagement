@@ -31,13 +31,13 @@ Write-Host ""
 Write-Host "[2/2] Retrieving secrets from Google Cloud Secret Manager..." -ForegroundColor Green
 Write-Host ""
 
-# Try to retrieve Dropbox access token from Secret Manager
-Write-Host "Checking for Dropbox access token in Secret Manager..." -ForegroundColor Cyan
-$dropboxToken = $null
+# Try to retrieve Google Credentials JSON from Secret Manager
+Write-Host "Checking for Google Sheets credentials in Secret Manager..." -ForegroundColor Cyan
+$googleCredentialsJson = $null
 try {
-    $dropboxToken = gcloud secrets versions access latest --secret="cfm-dropbox-token" 2>$null
-    if ($LASTEXITCODE -eq 0 -and ![string]::IsNullOrWhiteSpace($dropboxToken)) {
-        Write-Host "      Dropbox token retrieved from Secret Manager" -ForegroundColor Green
+    $googleCredentialsJson = gcloud secrets versions access latest --secret="cfm-google-credentials" 2>$null
+    if ($LASTEXITCODE -eq 0 -and ![string]::IsNullOrWhiteSpace($googleCredentialsJson)) {
+        Write-Host "      Google credentials retrieved from Secret Manager" -ForegroundColor Green
     } else {
         throw "Secret not found"
     }
@@ -45,35 +45,118 @@ try {
     Write-Host "      Secret not found. Let's set it up now!" -ForegroundColor Yellow
     Write-Host ""
     Write-Host "==================================================================" -ForegroundColor Cyan
-    Write-Host "  ONE-TIME SETUP: Store Dropbox Access Token in Secret Manager" -ForegroundColor Cyan
+    Write-Host "  ONE-TIME SETUP: Store Google Sheets Credentials" -ForegroundColor Cyan
     Write-Host "==================================================================" -ForegroundColor Cyan
     Write-Host ""
-    Write-Host "To get a Dropbox access token:" -ForegroundColor White
-    Write-Host "1. Go to https://www.dropbox.com/developers/apps" -ForegroundColor Gray
-    Write-Host "2. Select your app (or create one)" -ForegroundColor Gray
-    Write-Host "3. Go to 'Permissions' tab and enable 'files.content.write' and 'sharing.write'" -ForegroundColor Gray
-    Write-Host "4. Go to 'Settings' tab and generate an access token" -ForegroundColor Gray
-    Write-Host "   NOTE: Use 'Generate access token' in the OAuth 2 section for a long-lived token" -ForegroundColor Yellow
-    Write-Host ""
-    Write-Host "Paste your Dropbox access token:" -ForegroundColor White
-    Write-Host "(This will be stored securely in Google Cloud)" -ForegroundColor Gray
-    $dropboxTokenSecure = Read-Host -AsSecureString
-    $dropboxToken = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($dropboxTokenSecure))
 
-    Write-Host ""
-    Write-Host "Storing token in Secret Manager..." -ForegroundColor Cyan
-    $dropboxToken | gcloud secrets create cfm-dropbox-token --data-file=-
-
-    if ($LASTEXITCODE -eq 0) {
-        Write-Host "      Token stored successfully!" -ForegroundColor Green
-        Write-Host "      Future deployments will use this automatically" -ForegroundColor Gray
-    } else {
-        Write-Host "      ERROR: Failed to store token" -ForegroundColor Red
+    if (-not (Test-Path "credentials.json")) {
+        Write-Host "      ERROR: credentials.json not found in project directory!" -ForegroundColor Red
+        Write-Host "      Please ensure credentials.json exists before deployment." -ForegroundColor Red
         Write-Host ""
         Write-Host "Press any key to exit..."
         $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
         exit 1
     }
+
+    Write-Host "Reading credentials.json and storing in Secret Manager..." -ForegroundColor Cyan
+    Get-Content "credentials.json" -Raw | gcloud secrets create cfm-google-credentials --data-file=-
+
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "      Google credentials stored successfully!" -ForegroundColor Green
+        $googleCredentialsJson = Get-Content "credentials.json" -Raw
+    } else {
+        Write-Host "      ERROR: Failed to store credentials" -ForegroundColor Red
+        Write-Host ""
+        Write-Host "Press any key to exit..."
+        $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+        exit 1
+    }
+}
+
+Write-Host ""
+
+# Try to retrieve Dropbox App Key from Secret Manager
+Write-Host "Checking for Dropbox App Key in Secret Manager..." -ForegroundColor Cyan
+$dropboxAppKey = $null
+try {
+    $dropboxAppKey = gcloud secrets versions access latest --secret="cfm-dropbox-app-key" 2>$null
+    if ($LASTEXITCODE -eq 0 -and ![string]::IsNullOrWhiteSpace($dropboxAppKey)) {
+        Write-Host "      Dropbox App Key retrieved from Secret Manager" -ForegroundColor Green
+    } else {
+        throw "Secret not found"
+    }
+} catch {
+    Write-Host "      Secret not found. Let's set it up now!" -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "==================================================================" -ForegroundColor Cyan
+    Write-Host "  ONE-TIME SETUP: Store Dropbox App Key in Secret Manager" -ForegroundColor Cyan
+    Write-Host "==================================================================" -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "Paste your Dropbox App Key:" -ForegroundColor White
+    Write-Host "(Found in your Dropbox App Console under 'App key')" -ForegroundColor Gray
+    $dropboxAppKey = Read-Host
+
+    Write-Host ""
+    Write-Host "Storing App Key in Secret Manager..." -ForegroundColor Cyan
+    $dropboxAppKey | gcloud secrets create cfm-dropbox-app-key --data-file=-
+
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "      App Key stored successfully!" -ForegroundColor Green
+    } else {
+        Write-Host "      ERROR: Failed to store App Key" -ForegroundColor Red
+        Write-Host ""
+        Write-Host "Press any key to exit..."
+        $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+        exit 1
+    }
+}
+
+Write-Host ""
+Write-Host "Checking for Dropbox App Secret in Secret Manager..." -ForegroundColor Cyan
+$dropboxAppSecret = $null
+try {
+    $dropboxAppSecret = gcloud secrets versions access latest --secret="cfm-dropbox-app-secret" 2>$null
+    if ($LASTEXITCODE -eq 0 -and ![string]::IsNullOrWhiteSpace($dropboxAppSecret)) {
+        Write-Host "      Dropbox App Secret retrieved from Secret Manager" -ForegroundColor Green
+    } else {
+        throw "Secret not found"
+    }
+} catch {
+    Write-Host "      Secret not found. Let's set it up now!" -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "Paste your Dropbox App Secret:" -ForegroundColor White
+    Write-Host "(Found in your Dropbox App Console - click 'Show' next to 'App secret')" -ForegroundColor Gray
+    $dropboxAppSecret = Read-Host -AsSecureString
+    $dropboxAppSecretPlain = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($dropboxAppSecret))
+
+    Write-Host ""
+    Write-Host "Storing App Secret in Secret Manager..." -ForegroundColor Cyan
+    $dropboxAppSecretPlain | gcloud secrets create cfm-dropbox-app-secret --data-file=-
+
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "      App Secret stored successfully!" -ForegroundColor Green
+        $dropboxAppSecret = $dropboxAppSecretPlain
+    } else {
+        Write-Host "      ERROR: Failed to store App Secret" -ForegroundColor Red
+        Write-Host ""
+        Write-Host "Press any key to exit..."
+        $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+        exit 1
+    }
+}
+
+Write-Host ""
+Write-Host "Checking for Dropbox Refresh Token in Secret Manager..." -ForegroundColor Cyan
+$dropboxRefreshToken = $null
+try {
+    $dropboxRefreshToken = gcloud secrets versions access latest --secret="cfm-dropbox-refresh-token" 2>$null
+    if ($LASTEXITCODE -eq 0 -and ![string]::IsNullOrWhiteSpace($dropboxRefreshToken)) {
+        Write-Host "      Dropbox Refresh Token retrieved from Secret Manager" -ForegroundColor Green
+    } else {
+        Write-Host "      No refresh token found (will be configured after first OAuth setup)" -ForegroundColor Yellow
+    }
+} catch {
+    Write-Host "      No refresh token found (will be configured after first OAuth setup)" -ForegroundColor Yellow
 }
 
 Write-Host ""
@@ -118,7 +201,9 @@ try {
 
 Write-Host ""
 Write-Host "      All secrets configured!" -ForegroundColor Green
-Write-Host "      - Dropbox OAuth: Ready" -ForegroundColor Gray
+Write-Host "      - Google Sheets credentials: Ready" -ForegroundColor Gray
+Write-Host "      - Dropbox App Key & Secret: Ready" -ForegroundColor Gray
+Write-Host "      - Dropbox Refresh Token: $(if ($dropboxRefreshToken) { 'Ready' } else { 'Will be configured via OAuth' })" -ForegroundColor Gray
 Write-Host "      - Email password: Ready" -ForegroundColor Gray
 Write-Host ""
 
@@ -129,6 +214,14 @@ Write-Host ""
 
 # Build environment variables
 $envVars = "Email__FromPassword=$emailPasswordPlain,DROPBOX_APP_KEY=$dropboxAppKey,DROPBOX_APP_SECRET=$dropboxAppSecret,DROPBOX_REDIRECT_URI=https://church-facility-management-902794624514.us-central1.run.app/dropbox/callback"
+
+# Add Google credentials as environment variable (base64 encoded to handle special characters)
+$googleCredentialsBase64 = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($googleCredentialsJson))
+$envVars += ",GOOGLE_CREDENTIALS_JSON_BASE64=$googleCredentialsBase64"
+
+# Add Spreadsheet ID from appsettings.Development.json (or prompt if not found)
+$spreadsheetId = "1wAqKmvqa7rQoqttMBP1IQPB0G3465QNs5SsQXq5oTk4"
+$envVars += ",GoogleSheets__SpreadsheetId=$spreadsheetId"
 
 if (![string]::IsNullOrWhiteSpace($dropboxRefreshToken)) {
     $envVars += ",DROPBOX_REFRESH_TOKEN=$dropboxRefreshToken"

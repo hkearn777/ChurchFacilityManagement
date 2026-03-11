@@ -31,19 +31,32 @@ namespace ChurchFacilityManagement.Services
                 return _sheetsService;
 
             string jsonString;
-            
-            var credentialsJson = Environment.GetEnvironmentVariable("GOOGLE_CREDENTIALS_JSON");
-            
-            if (!string.IsNullOrEmpty(credentialsJson))
+
+            // Try base64 encoded credentials first (for Cloud Run deployment)
+            var credentialsBase64 = Environment.GetEnvironmentVariable("GOOGLE_CREDENTIALS_JSON_BASE64");
+
+            if (!string.IsNullOrEmpty(credentialsBase64))
             {
-                jsonString = credentialsJson;
-                _logger.LogInformation("Using credentials from environment variable");
+                var bytes = Convert.FromBase64String(credentialsBase64);
+                jsonString = System.Text.Encoding.UTF8.GetString(bytes);
+                _logger.LogInformation("Using credentials from base64 environment variable");
             }
+            // Fallback to plain JSON environment variable
             else
             {
-                var credentialsPath = _configuration["GoogleSheets:CredentialsPath"] ?? "credentials.json";
-                jsonString = await File.ReadAllTextAsync(credentialsPath);
-                _logger.LogInformation("Using credentials from file");
+                var credentialsJson = Environment.GetEnvironmentVariable("GOOGLE_CREDENTIALS_JSON");
+
+                if (!string.IsNullOrEmpty(credentialsJson))
+                {
+                    jsonString = credentialsJson;
+                    _logger.LogInformation("Using credentials from environment variable");
+                }
+                else
+                {
+                    var credentialsPath = _configuration["GoogleSheets:CredentialsPath"] ?? "credentials.json";
+                    jsonString = await File.ReadAllTextAsync(credentialsPath);
+                    _logger.LogInformation("Using credentials from file");
+                }
             }
 
 #pragma warning disable CS0618
