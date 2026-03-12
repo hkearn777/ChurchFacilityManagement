@@ -607,6 +607,7 @@ namespace ChurchFacilityManagement
                     Building = form["building"].ToString(),
                     Priority = form["priority"].ToString(),
                     Status = form["status"].ToString(),
+                    Notes = form["notes"].ToString(),
                     Assigned = form["assigned"].ToString(),
                     Trade = form["trade"].ToString(),
                     CorrectiveAction = form["correctiveAction"].ToString(),
@@ -979,7 +980,12 @@ namespace ChurchFacilityManagement
             <div class='field-label'>Status</div>
             <div class='field-value'>{request.Status}</div>
         </div>
-        
+
+        <div class='field'>
+            <div class='field-label'>Notes</div>
+            <div class='field-value'>{(string.IsNullOrEmpty(request.Notes) ? "None" : request.Notes)}</div>
+        </div>
+
         <div class='field'>
             <div class='field-label'>Assigned To</div>
             <div class='field-value'>{request.Assigned}</div>
@@ -1059,6 +1065,7 @@ namespace ChurchFacilityManagement
                 request.Building = form["building"].ToString();
                 request.Priority = form["priority"].ToString();
                 request.Status = newStatus;
+                request.Notes = form["notes"].ToString();
                 request.Assigned = form["assigned"].ToString();
                 request.Trade = form["trade"].ToString();
                 request.CorrectiveAction = form["correctiveAction"].ToString();
@@ -1261,7 +1268,12 @@ namespace ChurchFacilityManagement
                     {GenerateDropdownOptions(dropdowns.Statuses, req.Status)}
                 </select>
             </div>
-            
+
+            <div class='form-group'>
+                <label>Notes</label>
+                <textarea name='notes'>{req.Notes}</textarea>
+            </div>
+
             <div class='form-group'>
                 <label>Assigned To</label>
                 <input type='text' name='assigned' value='{req.Assigned}'>
