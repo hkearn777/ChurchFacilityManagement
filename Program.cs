@@ -730,20 +730,81 @@ namespace ChurchFacilityManagement
         .btn-approve:hover { background: #2d8e47; }
         .btn-reject { background: #d93025; }
         .btn-reject:hover { background: #b52a1f; }
+        .btn-defer { background: #fbbc04; }
+        .btn-defer:hover { background: #f9ab00; }
         .btn-view { background: #4285f4; }
         .btn-view:hover { background: #3367d6; }
         .empty-state { text-align: center; padding: 40px; color: #666; }
         .empty-state h2 { color: #34a853; }
+        .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.4); }
+        .modal-content { background-color: #fefefe; margin: 10% auto; padding: 30px; border: 1px solid #888; border-radius: 8px; width: 90%; max-width: 500px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .modal-header { font-size: 1.3em; font-weight: bold; margin-bottom: 20px; color: #333; }
+        .modal-close { color: #aaa; float: right; font-size: 28px; font-weight: bold; line-height: 20px; cursor: pointer; }
+        .modal-close:hover, .modal-close:focus { color: #000; }
+        .modal-textarea { width: 100%; padding: 10px; margin: 10px 0 20px 0; border: 1px solid #ddd; border-radius: 4px; font-family: Arial, sans-serif; font-size: 0.9em; min-height: 100px; resize: vertical; }
+        .modal-buttons { text-align: right; margin-top: 20px; }
+        .modal-btn { padding: 10px 20px; margin-left: 10px; border: none; border-radius: 4px; cursor: pointer; font-size: 0.9em; }
+        .modal-btn-submit { background: #fbbc04; color: white; }
+        .modal-btn-submit:hover { background: #f9ab00; }
+        .modal-btn-cancel { background: #666; color: white; }
+        .modal-btn-cancel:hover { background: #555; }
         @media (max-width: 768px) {
             body { padding: 10px; }
             .container { padding: 15px; }
             table { font-size: 0.75em; }
+            .modal-content { width: 95%; margin: 20% auto; padding: 20px; }
         }
     </style>
+    <script>
+        function openDeferModal(requestId) {
+            document.getElementById('deferModal').style.display = 'block';
+            document.getElementById('deferRequestId').value = requestId;
+            document.getElementById('deferNotes').value = '';
+            document.getElementById('deferNotes').focus();
+        }
+
+        function closeDeferModal() {
+            document.getElementById('deferModal').style.display = 'none';
+        }
+
+        function submitDefer() {
+            var requestId = document.getElementById('deferRequestId').value;
+            var notes = document.getElementById('deferNotes').value.trim();
+
+            if (notes === '') {
+                alert('Please enter notes for the deferral.');
+                return;
+            }
+
+            window.location.href = '/approver/defer/' + requestId + '?notes=' + encodeURIComponent(notes);
+        }
+
+        window.onclick = function(event) {
+            var modal = document.getElementById('deferModal');
+            if (event.target == modal) {
+                closeDeferModal();
+            }
+        }
+    </script>
 </head>
 <body>
     <div class='container'>
-        <h1>🔍 Approver Dashboard<span class='count-badge'>" + requestsNeedingApproval.Count + @" Pending</span></h1>";
+        <h1>🔍 Approver Dashboard<span class='count-badge'>" + requestsNeedingApproval.Count + @" Pending</span></h1>
+
+        <!-- Defer Modal -->
+        <div id='deferModal' class='modal'>
+            <div class='modal-content'>
+                <span class='modal-close' onclick='closeDeferModal()'>&times;</span>
+                <div class='modal-header'>📝 Defer Request</div>
+                <p style='color: #666; margin-bottom: 15px;'>Please provide notes for deferring this request:</p>
+                <textarea id='deferNotes' class='modal-textarea' placeholder='Enter deferral notes here...'></textarea>
+                <input type='hidden' id='deferRequestId' value='' />
+                <div class='modal-buttons'>
+                    <button class='modal-btn modal-btn-cancel' onclick='closeDeferModal()'>Cancel</button>
+                    <button class='modal-btn modal-btn-submit' onclick='submitDefer()'>Submit Deferral</button>
+                </div>
+            </div>
+        </div>";
 
                 if (requestsNeedingApproval.Count == 0)
                 {
@@ -790,6 +851,7 @@ namespace ChurchFacilityManagement
                         <a href='/request/{req.Id}' class='btn btn-view'>View</a>
                         <a href='/approver/approve/{req.Id}' class='btn btn-approve' onclick='return confirm(""Approve this request?"")'>✅ Approve</a>
                         <a href='/approver/reject/{req.Id}' class='btn btn-reject' onclick='return confirm(""Mark as Not Approved?"")'>❌ Not Approve</a>
+                        <button class='btn btn-defer' onclick='openDeferModal({req.Id})'>⏸️ Defer</button>
                     </td>
                 </tr>";
                     }
@@ -826,6 +888,20 @@ namespace ChurchFacilityManagement
                 if (request != null)
                 {
                     request.Status = "Not Approved";
+                    await sheetsService.UpdateRequestAsync(request);
+                }
+                return Results.Redirect("/approver");
+            });
+
+            // Defer a request with notes
+            app.MapGet("/approver/defer/{id}", async (int id, string notes, GoogleSheetsService sheetsService) =>
+            {
+                var request = await sheetsService.GetRequestByIdAsync(id);
+                if (request != null)
+                {
+                    request.Status = "Deferred";
+                    var deferredDate = DateTime.Now.ToString("yyyy-MM-dd");
+                    request.Notes = $"Deferred {deferredDate} - {notes}";
                     await sheetsService.UpdateRequestAsync(request);
                 }
                 return Results.Redirect("/approver");

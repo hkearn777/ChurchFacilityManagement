@@ -17,6 +17,7 @@ namespace ChurchFacilityManagement.Models
         public DateTime? StartDate { get; set; }
         public DateTime? CompletedDate { get; set; }
         public string Attachments { get; set; } = string.Empty;
+        public string Notes { get; set; } = string.Empty;
 
         public int RowNumber { get; set; }
     }

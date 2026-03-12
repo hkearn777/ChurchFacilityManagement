@@ -77,7 +77,7 @@ namespace ChurchFacilityManagement.Services
         {
             var service = await GetSheetsServiceAsync();
             var spreadsheetId = _configuration["GoogleSheets:SpreadsheetId"];
-            var range = $"{TASKS_SHEET}!A2:O";
+            var range = $"{TASKS_SHEET}!A2:P";
 
             try
             {
@@ -128,7 +128,7 @@ namespace ChurchFacilityManagement.Services
                 request.Id = await GetNextIdAsync();
                 request.ReportDate = DateTime.Now;
 
-                var range = $"{TASKS_SHEET}!A:O";
+                var range = $"{TASKS_SHEET}!A:P";
                 var valueRange = new ValueRange
                 {
                     Values = new List<IList<object>>
@@ -149,7 +149,8 @@ namespace ChurchFacilityManagement.Services
                             request.DueDate?.ToString("yyyy-MM-dd") ?? "",
                             request.StartDate?.ToString("yyyy-MM-dd") ?? "",
                             request.CompletedDate?.ToString("yyyy-MM-dd") ?? "",
-                            request.Attachments
+                            request.Attachments,
+                            request.Notes
                         }
                     }
                 };
@@ -175,7 +176,7 @@ namespace ChurchFacilityManagement.Services
 
             try
             {
-                var range = $"{TASKS_SHEET}!A{request.RowNumber}:O{request.RowNumber}";
+                var range = $"{TASKS_SHEET}!A{request.RowNumber}:P{request.RowNumber}";
                 var valueRange = new ValueRange
                 {
                     Values = new List<IList<object>>
@@ -196,7 +197,8 @@ namespace ChurchFacilityManagement.Services
                             request.DueDate?.ToString("yyyy-MM-dd") ?? "",
                             request.StartDate?.ToString("yyyy-MM-dd") ?? "",
                             request.CompletedDate?.ToString("yyyy-MM-dd") ?? "",
-                            request.Attachments
+                            request.Attachments,
+                            request.Notes
                         }
                     }
                 };
@@ -279,7 +281,7 @@ namespace ChurchFacilityManagement.Services
 
             try
             {
-                var range = $"{COMPLETED_SHEET}!A:O";
+                var range = $"{COMPLETED_SHEET}!A:P";
                 var valueRange = new ValueRange
                 {
                     Values = new List<IList<object>>
@@ -300,7 +302,8 @@ namespace ChurchFacilityManagement.Services
                             request.DueDate?.ToString("yyyy-MM-dd") ?? "",
                             request.StartDate?.ToString("yyyy-MM-dd") ?? "",
                             request.CompletedDate?.ToString("yyyy-MM-dd") ?? "",
-                            request.Attachments
+                            request.Attachments,
+                            request.Notes
                         }
                     }
                 };
@@ -429,6 +432,7 @@ namespace ChurchFacilityManagement.Services
                 StartDate = DateTime.TryParse(row.Count > 12 ? row[12].ToString() : "", out var startDate) ? startDate : null,
                 CompletedDate = DateTime.TryParse(row.Count > 13 ? row[13].ToString() : "", out var completedDate) ? completedDate : null,
                 Attachments = row.Count > 14 ? row[14].ToString() ?? "" : "",
+                Notes = row.Count > 15 ? row[15].ToString() ?? "" : "",
                 RowNumber = rowNumber
             };
         }
