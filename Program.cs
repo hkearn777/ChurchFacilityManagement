@@ -144,7 +144,8 @@ namespace ChurchFacilityManagement
                 var requests = await sheetsService.GetAllRequestsAsync();
                 var dropdowns = await sheetsService.GetDropdownValuesAsync();
 
-                var filterStatus = context.Request.Query["status"].ToString();
+                // Filter out null values to ensure non-nullable string array
+                var filterStatuses = context.Request.Query["status"].Where(s => !string.IsNullOrEmpty(s)).Select(s => s!).ToArray();
                 var filterPriority = context.Request.Query["priority"].ToString();
                 var filterBuilding = context.Request.Query["building"].ToString();
                 var searchText = context.Request.Query["search"].ToString();
@@ -154,8 +155,9 @@ namespace ChurchFacilityManagement
                 if (string.IsNullOrEmpty(sortOrder))
                     sortOrder = "asc";
 
-                if (!string.IsNullOrEmpty(filterStatus))
-                    requests = requests.Where(r => r.Status.Equals(filterStatus, StringComparison.OrdinalIgnoreCase)).ToList();
+                // If no statuses selected, show all; otherwise filter by selected statuses
+                if (filterStatuses.Length > 0)
+                    requests = requests.Where(r => filterStatuses.Contains(r.Status, StringComparer.OrdinalIgnoreCase)).ToList();
 
                 if (!string.IsNullOrEmpty(filterPriority))
                     requests = requests.Where(r => r.Priority.Equals(filterPriority, StringComparison.OrdinalIgnoreCase)).ToList();
@@ -192,6 +194,9 @@ namespace ChurchFacilityManagement
         .filter-group { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
         .filter-group label { font-weight: bold; }
         .filter-group select, .filter-group input { padding: 8px; border: 1px solid #ddd; border-radius: 4px; }
+        .checkbox-group { display: flex; gap: 15px; flex-wrap: wrap; align-items: center; background: white; padding: 10px; border: 1px solid #ddd; border-radius: 4px; }
+        .checkbox-group label { font-weight: normal; display: flex; align-items: center; gap: 5px; cursor: pointer; }
+        .checkbox-group input[type=""checkbox""] { cursor: pointer; width: 16px; height: 16px; }
         .table-wrapper { overflow-x: auto; }
         table { border-collapse: collapse; width: 100%; }
         th { background: #4285f4; color: white; padding: 12px 8px; text-align: left; font-size: 0.85em; }
@@ -220,7 +225,7 @@ namespace ChurchFacilityManagement
             <div>
                 <a href='/request/new' class='btn btn-success'>+ New Request</a>
                 <a href='/reports' class='btn'>📊 Reports</a>
-                <a href='/?sort=" + (sortOrder == "asc" ? "desc" : "asc") + (string.IsNullOrEmpty(filterStatus) ? "" : "&status=" + filterStatus) + (string.IsNullOrEmpty(filterPriority) ? "" : "&priority=" + filterPriority) + (string.IsNullOrEmpty(filterBuilding) ? "" : "&building=" + filterBuilding) + (string.IsNullOrEmpty(searchText) ? "" : "&search=" + searchText) + @"' class='btn' title='Toggle sort order'>
+                <a href='/?sort=" + (sortOrder == "asc" ? "desc" : "asc") + (filterStatuses.Length > 0 ? string.Concat(filterStatuses.Select(s => "&status=" + Uri.EscapeDataString(s ?? ""))) : "") + (string.IsNullOrEmpty(filterPriority) ? "" : "&priority=" + filterPriority) + (string.IsNullOrEmpty(filterBuilding) ? "" : "&building=" + filterBuilding) + (string.IsNullOrEmpty(searchText) ? "" : "&search=" + searchText) + @"' class='btn' title='Toggle sort order'>
                     " + (sortOrder == "asc" ? "📅 Oldest First ▲" : "📅 Newest First ▼") + @"
                 </a>
             </div>
@@ -230,10 +235,9 @@ namespace ChurchFacilityManagement
             <form method='get'>
                 <div class='filter-group'>
                     <label>Status:</label>
-                    <select name='status' onchange='this.form.submit()'>
-                        <option value=''>All</option>
-                        " + GenerateDropdownOptionsWithSelected(dropdowns.Statuses, filterStatus) + @"
-                    </select>
+                    <div class='checkbox-group'>
+                        " + GenerateStatusCheckboxes(dropdowns.Statuses, filterStatuses) + @"
+                    </div>
 
                     <label>Priority:</label>
                     <select name='priority' onchange='this.form.submit()'>
@@ -1410,6 +1414,25 @@ namespace ChurchFacilityManagement
             {
                 var selected = option == selectedValue ? " selected" : "";
                 html += $"<option value='{option}'{selected}>{option}</option>";
+            }
+            return html;
+        }
+
+        private static string GenerateStatusCheckboxes(List<string> statuses, string[] selectedStatuses)
+        {
+            var html = "";
+            foreach (var status in statuses)
+            {
+                // If no filters selected (empty array), check all boxes by default
+                // Otherwise, only check the selected ones
+                var isChecked = selectedStatuses.Length == 0 || selectedStatuses.Contains(status, StringComparer.OrdinalIgnoreCase);
+                var checkedAttr = isChecked ? " checked" : "";
+
+                html += $@"
+                        <label>
+                            <input type='checkbox' name='status' value='{status}'{checkedAttr} onchange='this.form.submit()'>
+                            {status}
+                        </label>";
             }
             return html;
         }

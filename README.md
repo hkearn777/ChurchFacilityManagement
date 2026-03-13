@@ -45,6 +45,17 @@ Same structure as Tasks tab, for historical record.
 | B | Person | Name of person |
 | C | Contact | Email or SMS contact |
 
+#### 4. **Dropdowns**
+The dropdown values for the Tasks tab are stored here for easy management:
+| Column | Dropdown Values |
+|--------|-------|
+| A | Buildings |
+| B | Priorities |
+| C | Status |
+| D | Request Method |
+These values are read by the application to populate form dropdowns.
+Rows 2 and below contain the actual options (e.g., Building A, Building B, etc.)
+
 ## Prerequisites
 
 - **.NET 10 SDK** or later
