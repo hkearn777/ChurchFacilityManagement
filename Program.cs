@@ -1029,6 +1029,8 @@ namespace ChurchFacilityManagement
             <a href='/request/{request.Id}/edit' class='btn'>Edit</a>
             <a href='/request/{request.Id}/delete' class='btn btn-danger' onclick='return confirm(""Are you sure you want to delete this request?"")'>Delete</a>
         </div>
+        <p></p>
+        <a href='/' class='back-link'>← Back to List</a>
     </div>
 </body>
 </html>";
@@ -1328,6 +1330,7 @@ namespace ChurchFacilityManagement
                 <a href='/' class='btn btn-secondary'>Cancel</a>
             </div>
         </form>
+        <p></p><a href='/' class='back-link'>← Back to List</a>
     </div>
 </body>
 </html>";
