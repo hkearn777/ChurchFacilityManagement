@@ -25,13 +25,24 @@ namespace ChurchFacilityManagement.Services
         private async Task<DropboxClient> GetDropboxClientAsync()
         {
             // Try to get valid tokens via OAuth (refresh token flow)
-            var tokens = await _oauthService.GetValidTokensAsync();
-
-            if (tokens != null && !string.IsNullOrEmpty(tokens.AccessToken))
+            try
             {
-                _logger.LogInformation("Using Dropbox access token from OAuth refresh token");
-                _dropboxClient = new DropboxClient(tokens.AccessToken);
-                return _dropboxClient;
+                var tokens = await _oauthService.GetValidTokensAsync();
+
+                if (tokens != null && !string.IsNullOrEmpty(tokens.AccessToken))
+                {
+                    _logger.LogInformation("Using Dropbox access token from OAuth refresh token");
+                    _dropboxClient = new DropboxClient(tokens.AccessToken);
+                    return _dropboxClient;
+                }
+                else
+                {
+                    _logger.LogWarning("OAuth service returned null or empty access token");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to get valid tokens via OAuth service");
             }
 
             // Fallback: Check environment variable for direct access token (backward compatibility)
@@ -53,7 +64,7 @@ namespace ChurchFacilityManagement.Services
                 return _dropboxClient;
             }
 
-            var errorMsg = "Dropbox not configured. Please run OAuth setup or set DROPBOX_REFRESH_TOKEN";
+            var errorMsg = "Dropbox not configured. Please run OAuth setup or set DROPBOX_REFRESH_TOKEN environment variable. No valid access token found in OAuth, environment variables, or appsettings.json.";
             _logger.LogError(errorMsg);
             throw new Exception(errorMsg);
         }

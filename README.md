@@ -251,12 +251,30 @@ ChurchFacilityManagement/
 | `/request/{id}/update` | POST | Update request |
 | `/request/{id}/delete` | GET | Delete request |
 | `/reports` | GET | Tracking reports |
+| `/privacy` | GET | Privacy policy (for Dropbox production) |
+| `/dropbox/setup` | GET | Dropbox OAuth setup |
+| `/dropbox/callback` | GET | Dropbox OAuth callback |
+
+## Dropbox Integration
+
+### Development Mode (Recommended)
+For internal church use, stay in **Development Mode**:
+1. Go to [Dropbox App Console](https://www.dropbox.com/developers/apps)
+2. Select your app → **Settings** → **Development users**
+3. Add email addresses of all users who need access
+4. **Supports up to 500 users** - sufficient for most churches!
+
+### Production Mode (Optional)
+If you need unlimited users or public access:
+1. Complete the Dropbox production approval process
+2. Provide **Privacy Policy URL**: `https://your-domain.com/privacy`
+3. The privacy policy is automatically served at `/privacy` endpoint
+4. **Privacy Policy link is available in the footer of all pages**
 
 ## Future Enhancements
 
 - [x] Email/SMS notifications
 - [x] File upload support (Dropbox integration)
-- [ ] User authentication and role-based permissions
 - [ ] Dashboard with charts/graphs
 - [ ] Export to PDF
 - [ ] Calendar view for due dates

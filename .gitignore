@@ -44,3 +44,7 @@ bld/
 *.cache
 *.dll
 *.exe
+
+# Personal utility scripts
+view-production-logs.*
+*-local.*

@@ -77,17 +77,36 @@ namespace ChurchFacilityManagement.Services
         {
             var tokens = await LoadTokensAsync();
 
-            if (tokens == null || string.IsNullOrEmpty(tokens.RefreshToken))
+            if (tokens == null)
             {
-                _logger.LogWarning("No refresh token available");
+                _logger.LogWarning("No tokens available. LoadTokensAsync returned null. Check DROPBOX_REFRESH_TOKEN environment variable or local token file.");
+                return null;
+            }
+
+            if (string.IsNullOrEmpty(tokens.RefreshToken))
+            {
+                _logger.LogWarning("No refresh token available in loaded tokens");
                 return null;
             }
 
             // If token is expired or will expire in the next 5 minutes, refresh it
             if (string.IsNullOrEmpty(tokens.AccessToken) || tokens.ExpiresAt <= DateTime.UtcNow.AddMinutes(5))
             {
-                _logger.LogInformation("Access token expired or expiring soon, refreshing");
-                tokens = await RefreshAccessTokenAsync(tokens.RefreshToken);
+                _logger.LogInformation($"Access token expired or expiring soon (expires at {tokens.ExpiresAt} UTC), refreshing now");
+                try
+                {
+                    tokens = await RefreshAccessTokenAsync(tokens.RefreshToken);
+                    _logger.LogInformation("Successfully refreshed access token");
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to refresh access token");
+                    throw;
+                }
+            }
+            else
+            {
+                _logger.LogInformation($"Using existing access token (expires at {tokens.ExpiresAt} UTC)");
             }
 
             return tokens;
@@ -101,6 +120,8 @@ namespace ChurchFacilityManagement.Services
             try
             {
                 _logger.LogInformation("Refreshing access token");
+                _logger.LogInformation($"Using App Key: {appKey?.Substring(0, Math.Min(4, appKey.Length))}... (length: {appKey?.Length})");
+                _logger.LogInformation($"Refresh Token: {refreshToken?.Substring(0, Math.Min(8, refreshToken.Length))}... (length: {refreshToken?.Length})");
 
                 // Use the DropboxClient with refresh token to get a new access token
                 using var httpClient = new HttpClient();
@@ -113,9 +134,35 @@ namespace ChurchFacilityManagement.Services
                 });
 
                 var response = await httpClient.PostAsync("https://api.dropbox.com/oauth2/token", requestBody);
-                response.EnsureSuccessStatusCode();
 
                 var responseContent = await response.Content.ReadAsStringAsync();
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    _logger.LogError($"Dropbox token refresh failed with status {response.StatusCode}");
+                    _logger.LogError($"Response body: {responseContent}");
+
+                    // Try to parse the error
+                    try
+                    {
+                        var errorDoc = JsonDocument.Parse(responseContent);
+                        var errorRoot = errorDoc.RootElement;
+                        if (errorRoot.TryGetProperty("error_description", out var errorDesc))
+                        {
+                            var errorMessage = errorDesc.GetString();
+                            _logger.LogError($"Dropbox error: {errorMessage}");
+                            throw new Exception($"Dropbox OAuth error: {errorMessage}");
+                        }
+                    }
+                    catch (JsonException)
+                    {
+                        // If we can't parse as JSON, just throw the raw response
+                        throw new Exception($"Dropbox returned {response.StatusCode}: {responseContent}");
+                    }
+                }
+
+                response.EnsureSuccessStatusCode();
+
                 var jsonDoc = JsonDocument.Parse(responseContent);
                 var root = jsonDoc.RootElement;
 

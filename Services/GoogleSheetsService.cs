@@ -89,10 +89,16 @@ namespace ChurchFacilityManagement.Services
 
                 if (values != null && values.Count > 0)
                 {
+                    var dropdowns = await GetDropdownValuesAsync();
                     int rowNumber = 2;
                     foreach (var row in values)
                     {
-                        requests.Add(ParseRowToRequest(row, rowNumber));
+                        var maintenanceRequest = ParseRowToRequest(row, rowNumber);
+                        if (dropdowns.StatusColors.TryGetValue(maintenanceRequest.Status, out var color))
+                        {
+                            maintenanceRequest.StatusColor = color;
+                        }
+                        requests.Add(maintenanceRequest);
                         rowNumber++;
                     }
                 }
@@ -370,9 +376,10 @@ namespace ChurchFacilityManagement.Services
 
             try
             {
-                var request = service.Spreadsheets.Values.Get(spreadsheetId, range);
-                var response = await request.ExecuteAsync();
-                var values = response.Values;
+                // First get the values
+                var valuesRequest = service.Spreadsheets.Values.Get(spreadsheetId, range);
+                var valuesResponse = await valuesRequest.ExecuteAsync();
+                var values = valuesResponse.Values;
 
                 if (values != null && values.Count > 0)
                 {
@@ -392,6 +399,62 @@ namespace ChurchFacilityManagement.Services
                     }
                 }
 
+                // Now get the cell formatting for Status column (column C) to read background colors
+                try
+                {
+                    var sheetId = await GetSheetIdAsync(DROPDOWNS_SHEET);
+                    var getRequest = service.Spreadsheets.Get(spreadsheetId);
+                    getRequest.Ranges = $"{DROPDOWNS_SHEET}!C2:C";
+                    getRequest.Fields = "sheets(data(rowData(values(userEnteredFormat.backgroundColor,effectiveFormat.backgroundColor))))";
+                    var formatResponse = await getRequest.ExecuteAsync();
+
+                    if (formatResponse.Sheets != null && formatResponse.Sheets.Count > 0)
+                    {
+                        var sheet = formatResponse.Sheets[0];
+                        if (sheet.Data != null && sheet.Data.Count > 0)
+                        {
+                            var rowData = sheet.Data[0].RowData;
+                            if (rowData != null)
+                            {
+                                for (int i = 0; i < rowData.Count && i < dropdowns.Statuses.Count; i++)
+                                {
+                                    var cellData = rowData[i].Values?[0];
+                                    // Prefer userEnteredFormat (manually set color) over effectiveFormat (includes alternating row colors)
+                                    var backgroundColor = cellData?.UserEnteredFormat?.BackgroundColor 
+                                                         ?? cellData?.EffectiveFormat?.BackgroundColor;
+
+                                    if (backgroundColor != null)
+                                    {
+                                        // Check if the color is essentially white (default background)
+                                        var isWhite = (backgroundColor.Red ?? 1.0f) > 0.95f &&
+                                                     (backgroundColor.Green ?? 1.0f) > 0.95f &&
+                                                     (backgroundColor.Blue ?? 1.0f) > 0.95f;
+
+                                        var cssColor = ConvertGoogleColorToCss(backgroundColor);
+                                        var statusValue = dropdowns.Statuses[i];
+
+                                        if (!isWhite)
+                                        {
+                                            dropdowns.StatusColors[statusValue] = cssColor;
+                                            _logger.LogInformation($"Mapped status '{statusValue}' to color '{cssColor}'");
+                                        }
+                                        else
+                                        {
+                                            _logger.LogInformation($"Skipped status '{statusValue}' - color is white/default ('{cssColor}')");
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    _logger.LogInformation($"Loaded {dropdowns.StatusColors.Count} status colors");
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Could not read status colors, will use default styling");
+                }
+
                 _logger.LogInformation($"Loaded dropdowns: {dropdowns.Buildings.Count} buildings, {dropdowns.Priorities.Count} priorities, {dropdowns.Statuses.Count} statuses, {dropdowns.RequestMethods.Count} request methods");
                 return dropdowns;
             }
@@ -399,6 +462,26 @@ namespace ChurchFacilityManagement.Services
             {
                 _logger.LogError(ex, "Error reading dropdown values");
                 return dropdowns;
+            }
+        }
+
+        private string ConvertGoogleColorToCss(Google.Apis.Sheets.v4.Data.Color color)
+        {
+            // Google Sheets returns RGB values as floats between 0 and 1
+            // Convert to 0-255 range for CSS
+            int r = (int)((color.Red ?? 1.0f) * 255);
+            int g = (int)((color.Green ?? 1.0f) * 255);
+            int b = (int)((color.Blue ?? 1.0f) * 255);
+            float a = color.Alpha ?? 1.0f;
+
+            // Return as rgba or hex depending on alpha
+            if (a < 1.0f)
+            {
+                return $"rgba({r},{g},{b},{a})";
+            }
+            else
+            {
+                return $"#{r:X2}{g:X2}{b:X2}";
             }
         }
 

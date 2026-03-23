@@ -151,9 +151,9 @@ namespace ChurchFacilityManagement
                 var searchText = context.Request.Query["search"].ToString();
                 var sortOrder = context.Request.Query["sort"].ToString();
 
-                // Default to ascending (oldest first) if not specified
+                // Default to descending (newest first) if not specified
                 if (string.IsNullOrEmpty(sortOrder))
-                    sortOrder = "asc";
+                    sortOrder = "desc";
 
                 // If no statuses selected, show all; otherwise filter by selected statuses
                 if (filterStatuses.Length > 0)
@@ -201,7 +201,7 @@ namespace ChurchFacilityManagement
         table { border-collapse: collapse; width: 100%; }
         th { background: #4285f4; color: white; padding: 12px 8px; text-align: left; font-size: 0.85em; }
         td { padding: 10px 8px; border: 1px solid #ddd; font-size: 0.85em; }
-        tr:hover { background: #f8f9fa; }
+        tbody tr:hover { filter: brightness(0.95); cursor: pointer; }
         .priority-high { color: #d93025; font-weight: bold; }
         .priority-normal { color: #4285f4; }
         .priority-low { color: #34a853; }
@@ -225,8 +225,8 @@ namespace ChurchFacilityManagement
             <div>
                 <a href='/request/new' class='btn btn-success'>+ New Request</a>
                 <a href='/reports' class='btn'>📊 Reports</a>
-                <a href='/?sort=" + (sortOrder == "asc" ? "desc" : "asc") + (filterStatuses.Length > 0 ? string.Concat(filterStatuses.Select(s => "&status=" + Uri.EscapeDataString(s ?? ""))) : "") + (string.IsNullOrEmpty(filterPriority) ? "" : "&priority=" + filterPriority) + (string.IsNullOrEmpty(filterBuilding) ? "" : "&building=" + filterBuilding) + (string.IsNullOrEmpty(searchText) ? "" : "&search=" + searchText) + @"' class='btn' title='Toggle sort order'>
-                    " + (sortOrder == "asc" ? "📅 Oldest First ▲" : "📅 Newest First ▼") + @"
+                <a href='/?sort=" + (sortOrder == "desc" ? "asc" : "desc") + (filterStatuses.Length > 0 ? string.Concat(filterStatuses.Select(s => "&status=" + Uri.EscapeDataString(s ?? ""))) : "") + (string.IsNullOrEmpty(filterPriority) ? "" : "&priority=" + filterPriority) + (string.IsNullOrEmpty(filterBuilding) ? "" : "&building=" + filterBuilding) + (string.IsNullOrEmpty(searchText) ? "" : "&search=" + searchText) + @"' class='btn' title='Toggle sort order'>
+                    " + (sortOrder == "desc" ? "📅 Newest First ▼" : "📅 Oldest First ▲") + @"
                 </a>
             </div>
         </div>
@@ -310,8 +310,12 @@ namespace ChurchFacilityManagement
                             _ => req.Priority
                         };
 
+                        var rowStyle = !string.IsNullOrEmpty(req.StatusColor) 
+                            ? $"style='background-color: {req.StatusColor}; opacity: 0.85;'" 
+                            : "";
+
                         html += $@"
-                <tr>
+                <tr {rowStyle}>
                     <td>{req.Id}</td>
                     <td>{req.ReportDate:yyyy-MM-dd}</td>
                     <td>{TruncateText(req.Description, 50)}</td>
@@ -332,6 +336,9 @@ namespace ChurchFacilityManagement
                 html += @"
             </table>
         </div>
+        <div style='text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd; color: #7f8c8d; font-size: 0.9em;'>
+            <p>© 2025 Church Facility Management | <a href='/privacy' style='color: #4285f4; text-decoration: none;'>Privacy Policy</a></p>
+        </div>
     </div>
 </body>
 </html>";
@@ -348,7 +355,7 @@ namespace ChurchFacilityManagement
             });
 
             // Requestor form submission
-            app.MapPost("/requestor/create", async (HttpContext context, GoogleSheetsService sheetsService, DropboxService dropboxService, EmailService emailService) =>
+            app.MapPost("/requestor/create", async (HttpContext context, GoogleSheetsService sheetsService, DropboxService dropboxService, EmailService emailService, ILogger<Program> logger) =>
             {
                 var form = context.Request.Form;
 
@@ -368,16 +375,19 @@ namespace ChurchFacilityManagement
                 };
 
                 var newId = await sheetsService.CreateRequestAsync(request);
+                logger.LogInformation($"Created request {newId} via requestor form");
                 var imageUploadError = "";
                 var imageUploadSuccess = false;
 
                 var files = form.Files.GetFiles("images");
+                logger.LogInformation($"Requestor upload: Received {files.Count} file(s) for request {newId}");
                 if (files.Count > 0)
                 {
                     var validFiles = files.Take(3).Where(f => f.Length <= 5 * 1024 * 1024).ToList();
 
                     if (validFiles.Count > 0)
                     {
+                        logger.LogInformation($"Requestor upload: Attempting to upload {validFiles.Count} valid file(s) to Dropbox for request {newId}");
                         try
                         {
                             var links = await dropboxService.UploadMultipleImagesAsync(newId, validFiles);
@@ -388,47 +398,49 @@ namespace ChurchFacilityManagement
                                 var createdRequest = await sheetsService.GetRequestByIdAsync(newId);
                                 if (createdRequest != null)
                                 {
-                                    createdRequest.Attachments = string.Join(", ", links);
-                                    await sheetsService.UpdateRequestAsync(createdRequest);
-                                    imageUploadSuccess = true;
-                                }
-                            }
-                            else
-                            {
-                                imageUploadError = "No images were uploaded successfully. Please check file sizes and formats.";
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            imageUploadError = $"Image upload failed: {ex.Message}";
+                                                        createdRequest.Attachments = string.Join(", ", links);
+                                                        await sheetsService.UpdateRequestAsync(createdRequest);
+                                                        imageUploadSuccess = true;
+                                                    }
+                                                }
+                                                else
+                                                {
+                                                    logger.LogWarning($"Requestor upload: No images uploaded successfully for request {newId}");
+                                                    imageUploadError = "No images were uploaded successfully. Please check file sizes and formats.";
+                                                }
+                                            }
+                                            catch (Exception ex)
+                                            {
+                                                logger.LogError(ex, $"Requestor upload: Image upload failed for request {newId}");
+                                                imageUploadError = $"Image upload failed: {ex.Message}";
 
-                            // Store error in Attachments column
-                            var createdRequest = await sheetsService.GetRequestByIdAsync(newId);
-                            if (createdRequest != null)
-                            {
-                                createdRequest.Attachments = $"IMAGE UPLOAD FAILED: {ex.Message}";
-                                await sheetsService.UpdateRequestAsync(createdRequest);
-                            }
+                                                // Store error in Attachments column
+                                                var createdRequest = await sheetsService.GetRequestByIdAsync(newId);
+                                                if (createdRequest != null)
+                                                {
+                                                    createdRequest.Attachments = $"IMAGE UPLOAD FAILED: {ex.Message}";
+                                                    await sheetsService.UpdateRequestAsync(createdRequest);
+                                                }
 
-                            // Send error notification to Manager
-                            var roles = await sheetsService.GetRolesAsync();
-                            var manager = roles.FirstOrDefault(r => r.RoleName.Equals("Manager", StringComparison.OrdinalIgnoreCase));
-                            if (manager != null && !string.IsNullOrEmpty(manager.Contact))
-                            {
-                                await emailService.SendImageUploadErrorNotificationAsync(newId, request.Description, request.RequestedBy, ex.Message, manager.Contact);
-                            }
-                        }
-                    }
-                }
+                                                // Send error notification to Manager
+                                                var roles = await sheetsService.GetRolesAsync();
+                                                var manager = roles.FirstOrDefault(r => r.RoleName.Equals("Manager", StringComparison.OrdinalIgnoreCase));
+                                                if (manager != null && !string.IsNullOrEmpty(manager.Contact))
+                                                {
+                                                    await emailService.SendImageUploadErrorNotificationAsync(newId, request.Description, request.RequestedBy, ex.Message, manager.Contact);
+                                                }
+                                            }
+                                        }
+                                    }
 
-                var statusMessage = imageUploadSuccess 
-                    ? "Request submitted successfully with images!" 
-                    : !string.IsNullOrEmpty(imageUploadError) 
-                        ? $"Request created, but image upload failed" 
-                        : "Request submitted successfully!";
+                                    var statusMessage = imageUploadSuccess 
+                                        ? "Request submitted successfully with images!" 
+                                        : !string.IsNullOrEmpty(imageUploadError) 
+                                            ? $"Request created, but image upload failed" 
+                                            : "Request submitted successfully!";
 
-                var statusColor = imageUploadSuccess ? "#34a853" : !string.IsNullOrEmpty(imageUploadError) ? "#fbbc04" : "#34a853";
-                var statusIcon = imageUploadSuccess ? "✅" : !string.IsNullOrEmpty(imageUploadError) ? "⚠️" : "✅";
+                                    var statusColor = imageUploadSuccess ? "#34a853" : !string.IsNullOrEmpty(imageUploadError) ? "#fbbc04" : "#34a853";
+                                    var statusIcon = imageUploadSuccess ? "✅" : !string.IsNullOrEmpty(imageUploadError) ? "⚠️" : "✅";
 
                 return Results.Text($@"
 <!DOCTYPE html>
@@ -474,7 +486,7 @@ namespace ChurchFacilityManagement
             });
 
             // Proxy form submission
-            app.MapPost("/proxy/create", async (HttpContext context, GoogleSheetsService sheetsService, DropboxService dropboxService, EmailService emailService) =>
+            app.MapPost("/proxy/create", async (HttpContext context, GoogleSheetsService sheetsService, DropboxService dropboxService, EmailService emailService, ILogger<Program> logger) =>
             {
                 var form = context.Request.Form;
 
@@ -494,16 +506,19 @@ namespace ChurchFacilityManagement
                 };
 
                 var newId = await sheetsService.CreateRequestAsync(request);
+                logger.LogInformation($"Created request {newId} via proxy form");
                 var imageUploadError = "";
                 var imageUploadSuccess = false;
 
                 var files = form.Files.GetFiles("images");
+                logger.LogInformation($"Proxy upload: Received {files.Count} file(s) for request {newId}");
                 if (files.Count > 0)
                 {
                     var validFiles = files.Take(3).Where(f => f.Length <= 5 * 1024 * 1024).ToList();
 
                     if (validFiles.Count > 0)
                     {
+                        logger.LogInformation($"Proxy upload: Attempting to upload {validFiles.Count} valid file(s) to Dropbox for request {newId}");
                         try
                         {
                             var links = await dropboxService.UploadMultipleImagesAsync(newId, validFiles);
@@ -521,11 +536,13 @@ namespace ChurchFacilityManagement
                             }
                             else
                             {
+                                logger.LogWarning($"Proxy upload: No images uploaded successfully for request {newId}");
                                 imageUploadError = "No images were uploaded successfully. Please check file sizes and formats.";
                             }
                         }
                         catch (Exception ex)
                         {
+                            logger.LogError(ex, $"Proxy upload: Image upload failed for request {newId}");
                             imageUploadError = $"Image upload failed: {ex.Message}";
 
                             // Store error in Attachments column
@@ -599,7 +616,7 @@ namespace ChurchFacilityManagement
             });
 
             // Create request
-            app.MapPost("/request/create", async (HttpContext context, GoogleSheetsService sheetsService, DropboxService dropboxService, EmailService emailService) =>
+            app.MapPost("/request/create", async (HttpContext context, GoogleSheetsService sheetsService, DropboxService dropboxService, EmailService emailService, ILogger<Program> logger) =>
             {
                 var form = context.Request.Form;
 
@@ -620,15 +637,18 @@ namespace ChurchFacilityManagement
                 };
 
                 var newId = await sheetsService.CreateRequestAsync(request);
+                logger.LogInformation($"Created request {newId} via admin form");
                 var imageUploadError = "";
 
                 var files = form.Files.GetFiles("images");
+                logger.LogInformation($"Admin upload: Received {files.Count} file(s) for request {newId}");
                 if (files.Count > 0)
                 {
                     var validFiles = files.Take(3).Where(f => f.Length <= 5 * 1024 * 1024).ToList();
 
                     if (validFiles.Count > 0)
                     {
+                        logger.LogInformation($"Admin upload: Attempting to upload {validFiles.Count} valid file(s) to Dropbox for request {newId}");
                         try
                         {
                             var links = await dropboxService.UploadMultipleImagesAsync(newId, validFiles);
@@ -650,6 +670,7 @@ namespace ChurchFacilityManagement
                         }
                         catch (Exception ex)
                         {
+                            logger.LogError(ex, $"Admin upload: Image upload error for request {newId}");
                             imageUploadError = $"Image upload error: {ex.Message}";
 
                             // Store error in Attachments column
@@ -1031,6 +1052,9 @@ namespace ChurchFacilityManagement
         </div>
         <p></p>
         <a href='/' class='back-link'>← Back to List</a>
+        <div style='text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd; color: #7f8c8d; font-size: 0.9em;'>
+            <p>© 2025 Church Facility Management | <a href='/privacy' style='color: #4285f4; text-decoration: none;'>Privacy Policy</a></p>
+        </div>
     </div>
 </body>
 </html>";
@@ -1054,7 +1078,7 @@ namespace ChurchFacilityManagement
             });
 
             // Update request
-            app.MapPost("/request/{id}/update", async (int id, HttpContext context, GoogleSheetsService sheetsService, DropboxService dropboxService, EmailService emailService) =>
+            app.MapPost("/request/{id}/update", async (int id, HttpContext context, GoogleSheetsService sheetsService, DropboxService dropboxService, EmailService emailService, ILogger<Program> logger) =>
             {
                 var request = await sheetsService.GetRequestByIdAsync(id);
                 if (request == null)
@@ -1080,6 +1104,7 @@ namespace ChurchFacilityManagement
                 request.CompletedDate = DateTime.TryParse(form["completedDate"].ToString(), out var completedDate) ? completedDate : null;
 
                 var files = form.Files.GetFiles("images");
+                logger.LogInformation($"Update request {id}: Received {files.Count} file(s)");
 
                 if (files.Count > 0)
                 {
@@ -1087,6 +1112,7 @@ namespace ChurchFacilityManagement
 
                     if (validFiles.Count > 0)
                     {
+                        logger.LogInformation($"Update request {id}: Attempting to upload {validFiles.Count} valid file(s) to Dropbox");
                         var links = await dropboxService.UploadMultipleImagesAsync(id, validFiles);
 
                         if (links.Count > 0)
@@ -1189,11 +1215,36 @@ namespace ChurchFacilityManagement
             <h2>Not Started</h2>
             {GenerateReportTable(notStarted)}
         </div>
+        <div style='text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd; color: #7f8c8d; font-size: 0.9em;'>
+            <p>© 2025 Church Facility Management | <a href='/privacy' style='color: #4285f4; text-decoration: none;'>Privacy Policy</a></p>
+        </div>
     </div>
 </body>
 </html>";
 
                 return Results.Text(html, "text/html");
+            });
+
+            // Privacy Policy endpoint (for Dropbox production approval)
+            app.MapGet("/privacy", async () =>
+            {
+                var privacyPolicyPath = Path.Combine(Directory.GetCurrentDirectory(), "privacy-policy.html");
+
+                if (File.Exists(privacyPolicyPath))
+                {
+                    var html = await File.ReadAllTextAsync(privacyPolicyPath);
+                    return Results.Content(html, "text/html");
+                }
+
+                return Results.Content(@"
+<!DOCTYPE html>
+<html>
+<head><title>Privacy Policy</title></head>
+<body>
+    <h1>Privacy Policy</h1>
+    <p>Privacy policy file not found. Please contact the administrator.</p>
+</body>
+</html>", "text/html");
             });
 
             app.Run();

@@ -79,9 +79,16 @@ Write-Host ""
 Write-Host "Checking for Dropbox App Key in Secret Manager..." -ForegroundColor Cyan
 $dropboxAppKey = $null
 try {
-    $dropboxAppKey = gcloud secrets versions access latest --secret="cfm-dropbox-app-key" 2>$null
-    if ($LASTEXITCODE -eq 0 -and ![string]::IsNullOrWhiteSpace($dropboxAppKey)) {
-        Write-Host "      Dropbox App Key retrieved from Secret Manager" -ForegroundColor Green
+    # Write to temp file with explicit encoding, then read back trimmed
+    gcloud secrets versions access latest --secret="cfm-dropbox-app-key" 2>$null | Out-File -FilePath "temp-dropbox-key.txt" -NoNewline -Encoding ASCII
+    if ($LASTEXITCODE -eq 0 -and (Test-Path "temp-dropbox-key.txt")) {
+        $dropboxAppKey = (Get-Content -Path "temp-dropbox-key.txt" -Raw).Trim()
+        Remove-Item "temp-dropbox-key.txt" -ErrorAction SilentlyContinue
+        if (![string]::IsNullOrWhiteSpace($dropboxAppKey)) {
+            Write-Host "      Dropbox App Key retrieved from Secret Manager" -ForegroundColor Green
+        } else {
+            throw "Secret not found"
+        }
     } else {
         throw "Secret not found"
     }
@@ -94,7 +101,7 @@ try {
     Write-Host ""
     Write-Host "Paste your Dropbox App Key:" -ForegroundColor White
     Write-Host "(Found in your Dropbox App Console under 'App key')" -ForegroundColor Gray
-    $dropboxAppKey = Read-Host
+    $dropboxAppKey = (Read-Host).Trim()
 
     Write-Host ""
     Write-Host "Storing App Key in Secret Manager..." -ForegroundColor Cyan
@@ -115,9 +122,16 @@ Write-Host ""
 Write-Host "Checking for Dropbox App Secret in Secret Manager..." -ForegroundColor Cyan
 $dropboxAppSecret = $null
 try {
-    $dropboxAppSecret = gcloud secrets versions access latest --secret="cfm-dropbox-app-secret" 2>$null
-    if ($LASTEXITCODE -eq 0 -and ![string]::IsNullOrWhiteSpace($dropboxAppSecret)) {
-        Write-Host "      Dropbox App Secret retrieved from Secret Manager" -ForegroundColor Green
+    # Write to temp file with explicit encoding, then read back trimmed
+    gcloud secrets versions access latest --secret="cfm-dropbox-app-secret" 2>$null | Out-File -FilePath "temp-dropbox-secret.txt" -NoNewline -Encoding ASCII
+    if ($LASTEXITCODE -eq 0 -and (Test-Path "temp-dropbox-secret.txt")) {
+        $dropboxAppSecret = (Get-Content -Path "temp-dropbox-secret.txt" -Raw).Trim()
+        Remove-Item "temp-dropbox-secret.txt" -ErrorAction SilentlyContinue
+        if (![string]::IsNullOrWhiteSpace($dropboxAppSecret)) {
+            Write-Host "      Dropbox App Secret retrieved from Secret Manager" -ForegroundColor Green
+        } else {
+            throw "Secret not found"
+        }
     } else {
         throw "Secret not found"
     }
@@ -135,7 +149,7 @@ try {
 
     if ($LASTEXITCODE -eq 0) {
         Write-Host "      App Secret stored successfully!" -ForegroundColor Green
-        $dropboxAppSecret = $dropboxAppSecretPlain
+        $dropboxAppSecret = $dropboxAppSecretPlain.Trim()
     } else {
         Write-Host "      ERROR: Failed to store App Secret" -ForegroundColor Red
         Write-Host ""
@@ -149,9 +163,16 @@ Write-Host ""
 Write-Host "Checking for Dropbox Refresh Token in Secret Manager..." -ForegroundColor Cyan
 $dropboxRefreshToken = $null
 try {
-    $dropboxRefreshToken = gcloud secrets versions access latest --secret="cfm-dropbox-refresh-token" 2>$null
-    if ($LASTEXITCODE -eq 0 -and ![string]::IsNullOrWhiteSpace($dropboxRefreshToken)) {
-        Write-Host "      Dropbox Refresh Token retrieved from Secret Manager" -ForegroundColor Green
+    # Write to temp file with explicit encoding, then read back trimmed
+    gcloud secrets versions access latest --secret="cfm-dropbox-refresh-token" 2>$null | Out-File -FilePath "temp-dropbox-token.txt" -NoNewline -Encoding ASCII
+    if ($LASTEXITCODE -eq 0 -and (Test-Path "temp-dropbox-token.txt")) {
+        $dropboxRefreshToken = (Get-Content -Path "temp-dropbox-token.txt" -Raw).Trim()
+        Remove-Item "temp-dropbox-token.txt" -ErrorAction SilentlyContinue
+        if (![string]::IsNullOrWhiteSpace($dropboxRefreshToken)) {
+            Write-Host "      Dropbox Refresh Token retrieved from Secret Manager" -ForegroundColor Green
+        } else {
+            Write-Host "      No refresh token found (will be configured after first OAuth setup)" -ForegroundColor Yellow
+        }
     } else {
         Write-Host "      No refresh token found (will be configured after first OAuth setup)" -ForegroundColor Yellow
     }
@@ -165,9 +186,16 @@ Write-Host "Checking for email password in Secret Manager..." -ForegroundColor C
 # Try to retrieve email password from Secret Manager
 $emailPasswordPlain = $null
 try {
-    $emailPasswordPlain = gcloud secrets versions access latest --secret="cfm-email-password" 2>$null
-    if ($LASTEXITCODE -eq 0 -and ![string]::IsNullOrWhiteSpace($emailPasswordPlain)) {
-        Write-Host "      Email password retrieved from Secret Manager" -ForegroundColor Green
+    # Write to temp file with explicit encoding, then read back trimmed
+    gcloud secrets versions access latest --secret="cfm-email-password" 2>$null | Out-File -FilePath "temp-email-password.txt" -NoNewline -Encoding ASCII
+    if ($LASTEXITCODE -eq 0 -and (Test-Path "temp-email-password.txt")) {
+        $emailPasswordPlain = (Get-Content -Path "temp-email-password.txt" -Raw).Trim()
+        Remove-Item "temp-email-password.txt" -ErrorAction SilentlyContinue
+        if (![string]::IsNullOrWhiteSpace($emailPasswordPlain)) {
+            Write-Host "      Email password retrieved from Secret Manager" -ForegroundColor Green
+        } else {
+            throw "Secret not found"
+        }
     } else {
         throw "Secret not found"
     }

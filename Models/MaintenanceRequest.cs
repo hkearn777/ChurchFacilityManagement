@@ -20,5 +20,6 @@ namespace ChurchFacilityManagement.Models
         public string Notes { get; set; } = string.Empty;
 
         public int RowNumber { get; set; }
+        public string StatusColor { get; set; } = string.Empty;
     }
 }
