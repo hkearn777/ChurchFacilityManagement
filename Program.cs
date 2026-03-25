@@ -13,6 +13,7 @@ namespace ChurchFacilityManagement
             builder.Services.AddSingleton<DropboxOAuthService>();
             builder.Services.AddSingleton<DropboxService>();
             builder.Services.AddSingleton<EmailService>();
+            builder.Services.AddSingleton<PdfReportService>();
 
             var app = builder.Build();
 
@@ -1166,6 +1167,8 @@ namespace ChurchFacilityManagement
         h1 {{ color: #333; }}
         .back-link {{ display: inline-block; margin-bottom: 15px; color: #4285f4; text-decoration: none; }}
         .back-link:hover {{ text-decoration: underline; }}
+        .btn {{ display: inline-block; padding: 10px 20px; background: #4285f4; color: white; text-decoration: none; border-radius: 4px; border: none; font-size: 0.9em; cursor: pointer; }}
+        .btn:hover {{ background: #3367d6; }}
         .report-section {{ margin-bottom: 30px; }}
         .report-section h2 {{ color: #666; border-bottom: 2px solid #4285f4; padding-bottom: 10px; }}
         .count {{ font-size: 2em; font-weight: bold; color: #4285f4; }}
@@ -1175,6 +1178,12 @@ namespace ChurchFacilityManagement
         .report-card.overdue {{ border-left-color: #d93025; }}
         .report-card.started {{ border-left-color: #fbbc04; }}
         .report-card.not-started {{ border-left-color: #34a853; }}
+        .report-list {{ margin-top: 15px; }}
+        .report-item {{ display: flex; align-items: center; padding: 15px; margin-bottom: 10px; background: #f8f9fa; border-radius: 4px; border-left: 3px solid #4285f4; }}
+        .report-item:hover {{ background: #e8f0fe; }}
+        .report-item-content {{ flex: 1; }}
+        .report-item h3 {{ margin: 0 0 5px 0; color: #333; font-size: 1.1em; }}
+        .report-item p {{ margin: 0; color: #666; font-size: 0.9em; }}
         table {{ width: 100%; border-collapse: collapse; margin-top: 10px; }}
         th {{ background: #4285f4; color: white; padding: 10px; text-align: left; }}
         td {{ padding: 8px; border: 1px solid #ddd; }}
@@ -1185,7 +1194,30 @@ namespace ChurchFacilityManagement
     <div class='container'>
         <a href='/' class='back-link'>← Back to Requests</a>
         <h1>📊 Reports</h1>
-        
+
+        <div class='report-section'>
+            <h2>📄 Workday PDF Reports</h2>
+            <p style='color: #666; margin-bottom: 15px;'>Generate printable reports for Workday events. Click on any report to configure and generate.</p>
+
+            <div class='report-list'>
+                <div class='report-item'>
+                    <div class='report-item-content'>
+                        <h3>📋 Report 1: By Status</h3>
+                        <p>All requests grouped by status values (oldest to newest)</p>
+                    </div>
+                    <a href='/reports/configure/1' class='btn'>Configure & Generate</a>
+                </div>
+
+                <div class='report-item'>
+                    <div class='report-item-content'>
+                        <h3>📋 Report 2: By Status (Filtered)</h3>
+                        <p>Select specific status values to include in the report</p>
+                    </div>
+                    <a href='/reports/configure/2' class='btn'>Configure & Generate</a>
+                </div>
+            </div>
+        </div>
+
         <div class='report-grid'>
             <div class='report-card overdue'>
                 <h3>Overdue Requests</h3>
@@ -1246,6 +1278,213 @@ namespace ChurchFacilityManagement
 </body>
 </html>", "text/html");
             });
+
+            // Report 1 Configuration Page - By Status (All)
+            app.MapGet("/reports/configure/1", async (GoogleSheetsService sheetsService) =>
+            {
+                var html = @"
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset='UTF-8'>
+    <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+    <title>Configure Report 1</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; background: #f5f5f5; }
+        .container { max-width: 700px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        h1 { color: #333; margin-top: 0; }
+        .back-link { display: inline-block; margin-bottom: 15px; color: #4285f4; text-decoration: none; }
+        .back-link:hover { text-decoration: underline; }
+        .info-box { background: #e3f2fd; padding: 20px; border-radius: 4px; margin: 20px 0; border-left: 4px solid #4285f4; }
+        .info-box h3 { margin-top: 0; color: #1565c0; }
+        .info-box ul { margin: 10px 0; padding-left: 20px; }
+        .info-box li { margin: 5px 0; color: #333; }
+        .btn { display: inline-block; padding: 12px 30px; background: #4285f4; color: white; text-decoration: none; border: none; border-radius: 4px; cursor: pointer; font-size: 1em; font-weight: bold; }
+        .btn:hover { background: #3367d6; }
+        .btn-secondary { background: #666; margin-left: 10px; }
+        .btn-secondary:hover { background: #555; }
+    </style>
+</head>
+<body>
+    <div class='container'>
+        <a href='/reports' class='back-link'>← Back to Reports</a>
+        <h1>📋 Report 1: By Status</h1>
+
+        <div class='info-box'>
+            <h3>Report Configuration</h3>
+            <p><strong>This report includes all maintenance requests grouped by their status values.</strong></p>
+            <ul>
+                <li><strong>Grouping:</strong> By Status</li>
+                <li><strong>Columns:</strong> Status, Building, Priority, Assigned To, Description</li>
+                <li><strong>Sort Order:</strong> Oldest to Newest (by Report Date)</li>
+                <li><strong>Format:</strong> PDF (Portrait, 8.5×11 inches)</li>
+            </ul>
+            <p style='margin-top: 15px; color: #666;'>No configuration options are needed for this report.</p>
+        </div>
+
+        <form method='post' action='/reports/generate/1'>
+            <button type='submit' class='btn'>📄 Generate PDF Report</button>
+            <a href='/reports' class='btn btn-secondary'>Cancel</a>
+        </form>
+    </div>
+</body>
+</html>";
+
+                return Results.Text(html, "text/html");
+            });
+
+            // Report 1 Generation - POST
+            app.MapPost("/reports/generate/1", async (GoogleSheetsService sheetsService, PdfReportService pdfService) =>
+            {
+                var allRequests = await sheetsService.GetAllRequestsAsync();
+                var pdfBytes = pdfService.GenerateReportByStatus(allRequests);
+
+                return Results.File(pdfBytes, "application/pdf", $"Workday_Report_By_Status_{DateTime.Now:yyyyMMdd}.pdf");
+            });
+
+            // Report 2 Configuration Page - By Status (Filtered)
+            app.MapGet("/reports/configure/2", async (GoogleSheetsService sheetsService) =>
+            {
+                var dropdowns = await sheetsService.GetDropdownValuesAsync();
+                var statusCheckboxes = "";
+
+                foreach (var status in dropdowns.Statuses)
+                {
+                    statusCheckboxes += $@"
+                        <label class='checkbox-label'>
+                            <input type='checkbox' name='statuses' value='{status}' checked>
+                            <span>{status}</span>
+                        </label>";
+                }
+
+                var html = $@"
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset='UTF-8'>
+    <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+    <title>Configure Report 2</title>
+    <style>
+        body {{ font-family: Arial, sans-serif; padding: 20px; background: #f5f5f5; }}
+        .container {{ max-width: 700px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }}
+        h1 {{ color: #333; margin-top: 0; }}
+        .back-link {{ display: inline-block; margin-bottom: 15px; color: #4285f4; text-decoration: none; }}
+        .back-link:hover {{ text-decoration: underline; }}
+        .info-box {{ background: #e3f2fd; padding: 20px; border-radius: 4px; margin: 20px 0; border-left: 4px solid #4285f4; }}
+        .info-box h3 {{ margin-top: 0; color: #1565c0; }}
+        .info-box ul {{ margin: 10px 0; padding-left: 20px; }}
+        .info-box li {{ margin: 5px 0; color: #333; }}
+        .form-section {{ margin: 25px 0; }}
+        .form-section label.section-label {{ display: block; font-weight: bold; font-size: 1.1em; margin-bottom: 15px; color: #333; }}
+        .checkbox-group {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }}
+        .checkbox-label {{ display: flex; align-items: center; padding: 10px; border: 1px solid #ddd; border-radius: 4px; cursor: pointer; transition: background 0.2s; }}
+        .checkbox-label:hover {{ background: #f8f9fa; }}
+        .checkbox-label input[type='checkbox'] {{ margin-right: 10px; width: 18px; height: 18px; cursor: pointer; }}
+        .checkbox-label span {{ flex: 1; }}
+        .action-links {{ margin-top: 10px; font-size: 0.9em; }}
+        .action-links a {{ color: #4285f4; text-decoration: none; margin-right: 15px; cursor: pointer; }}
+        .action-links a:hover {{ text-decoration: underline; }}
+        .btn {{ display: inline-block; padding: 12px 30px; background: #4285f4; color: white; text-decoration: none; border: none; border-radius: 4px; cursor: pointer; font-size: 1em; font-weight: bold; }}
+        .btn:hover {{ background: #3367d6; }}
+        .btn:disabled {{ background: #ccc; cursor: not-allowed; }}
+        .btn-secondary {{ background: #666; margin-left: 10px; }}
+        .btn-secondary:hover {{ background: #555; }}
+        .warning {{ background: #fff3cd; padding: 15px; border-radius: 4px; margin: 15px 0; color: #856404; border-left: 4px solid #ffc107; display: none; }}
+    </style>
+    <script>
+        function selectAll() {{
+            document.querySelectorAll('input[name=""statuses""]').forEach(cb => cb.checked = true);
+            updateButtonState();
+        }}
+
+        function selectNone() {{
+            document.querySelectorAll('input[name=""statuses""]').forEach(cb => cb.checked = false);
+            updateButtonState();
+        }}
+
+        function updateButtonState() {{
+            const checkedCount = document.querySelectorAll('input[name=""statuses""]:checked').length;
+            const generateBtn = document.getElementById('generateBtn');
+            const warning = document.getElementById('warning');
+
+            if (checkedCount === 0) {{
+                generateBtn.disabled = true;
+                warning.style.display = 'block';
+            }} else {{
+                generateBtn.disabled = false;
+                warning.style.display = 'none';
+            }}
+        }}
+
+        document.addEventListener('DOMContentLoaded', function() {{
+            document.querySelectorAll('input[name=""statuses""]').forEach(cb => {{
+                cb.addEventListener('change', updateButtonState);
+            }});
+            updateButtonState();
+        }});
+    </script>
+</head>
+<body>
+    <div class='container'>
+        <a href='/reports' class='back-link'>← Back to Reports</a>
+        <h1>📋 Report 2: By Status (Filtered)</h1>
+
+        <div class='info-box'>
+            <h3>Report Configuration</h3>
+            <p><strong>This report includes requests grouped by selected status values.</strong></p>
+            <ul>
+                <li><strong>Grouping:</strong> By Status (filtered)</li>
+                <li><strong>Columns:</strong> Status, Building, Priority, Assigned To, Description</li>
+                <li><strong>Sort Order:</strong> Oldest to Newest (by Report Date)</li>
+                <li><strong>Format:</strong> PDF (Portrait, 8.5×11 inches)</li>
+            </ul>
+        </div>
+
+        <form method='post' action='/reports/generate/2'>
+            <div class='form-section'>
+                <label class='section-label'>Select Status Values to Include:</label>
+                <div class='action-links'>
+                    <a onclick='selectAll()'>Select All</a>
+                    <a onclick='selectNone()'>Select None</a>
+                </div>
+                <div class='checkbox-group'>
+                    {statusCheckboxes}
+                </div>
+            </div>
+
+            <div id='warning' class='warning'>
+                <strong>⚠️ Warning:</strong> Please select at least one status value to generate the report.
+            </div>
+
+            <div style='margin-top: 25px;'>
+                <button type='submit' id='generateBtn' class='btn'>📄 Generate PDF Report</button>
+                <a href='/reports' class='btn btn-secondary'>Cancel</a>
+            </div>
+        </form>
+    </div>
+</body>
+</html>";
+
+                return Results.Text(html, "text/html");
+            });
+
+            // Report 2 Generation - POST
+            app.MapPost("/reports/generate/2", async (HttpContext context, GoogleSheetsService sheetsService, PdfReportService pdfService) =>
+            {
+                var form = context.Request.Form;
+                var selectedStatuses = form["statuses"].Where(s => !string.IsNullOrEmpty(s)).Select(s => s!).ToList();
+
+                if (selectedStatuses.Count == 0)
+                {
+                    return Results.Redirect("/reports/configure/2");
+                }
+
+                var allRequests = await sheetsService.GetAllRequestsAsync();
+                var pdfBytes = pdfService.GenerateReportByStatusFiltered(allRequests, selectedStatuses);
+
+                return Results.File(pdfBytes, "application/pdf", $"Workday_Report_By_Status_Filtered_{DateTime.Now:yyyyMMdd}.pdf");
+            });
+
 
             app.Run();
         }

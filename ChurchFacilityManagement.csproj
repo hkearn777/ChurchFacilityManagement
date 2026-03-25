@@ -10,6 +10,7 @@
     <PackageReference Include="Dropbox.Api" Version="7.0.0" />
     <PackageReference Include="Google.Apis.Drive.v3" Version="1.73.0.4068" />
     <PackageReference Include="Google.Apis.Sheets.v4" Version="1.72.0.3966" />
+    <PackageReference Include="QuestPDF" Version="2024.12.3" />
   </ItemGroup>
 
 </Project>
