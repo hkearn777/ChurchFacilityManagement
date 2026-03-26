@@ -144,7 +144,6 @@ namespace ChurchFacilityManagement.Services
                     page.DefaultTextStyle(x => x.FontSize(10).FontFamily("Arial"));
 
                     page.Header()
-                        .Height(0.75f, Unit.Inch)
                         .AlignCenter()
                         .Column(column =>
                         {
