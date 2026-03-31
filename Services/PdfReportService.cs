@@ -36,7 +36,7 @@ namespace ChurchFacilityManagement.Services
                                 .Bold()
                                 .FontColor(Colors.Blue.Darken2);
 
-                            column.Item().Text("Workday Report - Requests Grouped by Status")
+                            column.Item().Text("Report - Requests Grouped by Status")
                                 .FontSize(12)
                                 .SemiBold();
 
@@ -152,7 +152,7 @@ namespace ChurchFacilityManagement.Services
                                 .Bold()
                                 .FontColor(Colors.Blue.Darken2);
 
-                            column.Item().Text("Workday Report - By Status (Filtered)")
+                            column.Item().Text("Report - By Status (Filtered)")
                                 .FontSize(12)
                                 .SemiBold();
 
@@ -222,6 +222,122 @@ namespace ChurchFacilityManagement.Services
                             if (!groupedByStatus.Any())
                             {
                                 column.Item().PaddingTop(50).AlignCenter().Text("No requests found with selected statuses.")
+                                    .FontSize(12)
+                                    .FontColor(Colors.Grey.Darken1);
+                            }
+                        });
+
+                    page.Footer()
+                        .Height(0.5f, Unit.Inch)
+                        .AlignCenter()
+                        .Text(text =>
+                        {
+                            text.Span("Page ");
+                            text.CurrentPageNumber();
+                            text.Span(" of ");
+                            text.TotalPages();
+                        });
+                });
+            });
+
+            return document.GeneratePdf();
+        }
+
+        public byte[] GenerateCompletedReport(List<MaintenanceRequest> requests, DateTime startDate, DateTime endDate)
+        {
+            QuestPDF.Settings.License = LicenseType.Community;
+
+            // Filter by Completed status and date range, ordered by CompletedDate (oldest to newest)
+            var filteredRequests = requests
+                .Where(r => r.Status.Equals("Completed", StringComparison.OrdinalIgnoreCase) 
+                    && r.CompletedDate.HasValue 
+                    && r.CompletedDate.Value.Date >= startDate.Date 
+                    && r.CompletedDate.Value.Date <= endDate.Date)
+                .OrderBy(r => r.CompletedDate)
+                .ToList();
+
+            var document = Document.Create(container =>
+            {
+                container.Page(page =>
+                {
+                    page.Size(PageSizes.Letter);
+                    page.Margin(0.5f, Unit.Inch);
+                    page.PageColor(Colors.White);
+                    page.DefaultTextStyle(x => x.FontSize(10).FontFamily("Arial"));
+
+                    page.Header()
+                        .AlignCenter()
+                        .Column(column =>
+                        {
+                            column.Item().Text("Church Facility Management")
+                                .FontSize(16)
+                                .Bold()
+                                .FontColor(Colors.Blue.Darken2);
+
+                            column.Item().Text("Completed Report")
+                                .FontSize(12)
+                                .SemiBold();
+
+                            column.Item().Text($"Date Range: {startDate:yyyy-MM-dd} to {endDate:yyyy-MM-dd}")
+                                .FontSize(9)
+                                .FontColor(Colors.Grey.Darken2);
+
+                            column.Item().Text($"Generated: {DateTime.Now:yyyy-MM-dd HH:mm}")
+                                .FontSize(9)
+                                .FontColor(Colors.Grey.Darken1);
+                        });
+
+                    page.Content()
+                        .Column(column =>
+                        {
+                            if (filteredRequests.Any())
+                            {
+                                column.Item().PaddingTop(0.2f, Unit.Inch).Table(table =>
+                                {
+                                    table.ColumnsDefinition(columns =>
+                                    {
+                                        columns.RelativeColumn(1.5f); // Status
+                                        columns.RelativeColumn(1.5f); // Building
+                                        columns.RelativeColumn(1); // Priority
+                                        columns.RelativeColumn(1.5f); // Assigned To
+                                        columns.RelativeColumn(3); // Description
+                                        columns.RelativeColumn(3); // Corrective Action
+                                    });
+
+                                    // Header
+                                    table.Header(header =>
+                                    {
+                                        header.Cell().Background(Colors.Blue.Lighten2).Padding(5).Text("Status").Bold();
+                                        header.Cell().Background(Colors.Blue.Lighten2).Padding(5).Text("Building").Bold();
+                                        header.Cell().Background(Colors.Blue.Lighten2).Padding(5).Text("Priority").Bold();
+                                        header.Cell().Background(Colors.Blue.Lighten2).Padding(5).Text("Assigned To").Bold();
+                                        header.Cell().Background(Colors.Blue.Lighten2).Padding(5).Text("Description").Bold();
+                                        header.Cell().Background(Colors.Blue.Lighten2).Padding(5).Text("Corrective Action").Bold();
+                                    });
+
+                                    // Data rows
+                                    foreach (var request in filteredRequests)
+                                    {
+                                        var priorityText = request.Priority switch
+                                        {
+                                            "1" => "High",
+                                            "2" => "Normal",
+                                            "3" => "Low",
+                                            _ => request.Priority
+                                        };
+
+                                        table.Cell().Border(1).BorderColor(Colors.Grey.Lighten2).Padding(5).Text(request.Status);
+                                        table.Cell().Border(1).BorderColor(Colors.Grey.Lighten2).Padding(5).Text(request.Building);
+                                        table.Cell().Border(1).BorderColor(Colors.Grey.Lighten2).Padding(5).Text(priorityText);
+                                        table.Cell().Border(1).BorderColor(Colors.Grey.Lighten2).Padding(5).Text(request.Assigned);
+                                        table.Cell().Border(1).BorderColor(Colors.Grey.Lighten2).Padding(5).Text(request.Description);
+                                        table.Cell().Border(1).BorderColor(Colors.Grey.Lighten2).Padding(5).Text(request.CorrectiveAction);
+                                    }
+                                });
+                            }
+                            else
+                            {
+                                column.Item().PaddingTop(50).AlignCenter().Text("No completed requests found in the selected date range.")
                                     .FontSize(12)
                                     .FontColor(Colors.Grey.Darken1);
                             }

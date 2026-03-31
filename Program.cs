@@ -1215,6 +1215,14 @@ namespace ChurchFacilityManagement
                     </div>
                     <a href='/reports/configure/2' class='btn'>Configure & Generate</a>
                 </div>
+
+                <div class='report-item'>
+                    <div class='report-item-content'>
+                        <h3>📋 Report 3: Completed Report</h3>
+                        <p>Completed tasks within a specific date range</p>
+                    </div>
+                    <a href='/reports/configure/3' class='btn'>Configure & Generate</a>
+                </div>
             </div>
         </div>
 
@@ -1483,6 +1491,140 @@ namespace ChurchFacilityManagement
                 var pdfBytes = pdfService.GenerateReportByStatusFiltered(allRequests, selectedStatuses);
 
                 return Results.File(pdfBytes, "application/pdf", $"Workday_Report_By_Status_Filtered_{DateTime.Now:yyyyMMdd}.pdf");
+            });
+
+            // Report 3 Configuration Page - Completed Report
+            app.MapGet("/reports/configure/3", async (GoogleSheetsService sheetsService) =>
+            {
+                var html = @"
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset='UTF-8'>
+    <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+    <title>Configure Report 3</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; background: #f5f5f5; }
+        .container { max-width: 700px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        h1 { color: #333; margin-top: 0; }
+        .back-link { display: inline-block; margin-bottom: 15px; color: #4285f4; text-decoration: none; }
+        .back-link:hover { text-decoration: underline; }
+        .info-box { background: #e3f2fd; padding: 20px; border-radius: 4px; margin: 20px 0; border-left: 4px solid #4285f4; }
+        .info-box h3 { margin-top: 0; color: #1565c0; }
+        .info-box ul { margin: 10px 0; padding-left: 20px; }
+        .info-box li { margin: 5px 0; color: #333; }
+        .form-section { margin: 25px 0; }
+        .form-section label { display: block; font-weight: bold; margin-bottom: 8px; color: #333; }
+        .form-section input[type='date'] { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 1em; box-sizing: border-box; }
+        .date-inputs { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .btn { display: inline-block; padding: 12px 30px; background: #4285f4; color: white; text-decoration: none; border: none; border-radius: 4px; cursor: pointer; font-size: 1em; font-weight: bold; }
+        .btn:hover { background: #3367d6; }
+        .btn:disabled { background: #ccc; cursor: not-allowed; }
+        .btn-secondary { background: #666; margin-left: 10px; }
+        .btn-secondary:hover { background: #555; }
+        .warning { background: #fff3cd; padding: 15px; border-radius: 4px; margin: 15px 0; color: #856404; border-left: 4px solid #ffc107; display: none; }
+    </style>
+    <script>
+        function validateDates() {
+            const startDate = document.getElementById('startDate').value;
+            const endDate = document.getElementById('endDate').value;
+            const generateBtn = document.getElementById('generateBtn');
+            const warning = document.getElementById('warning');
+
+            if (!startDate || !endDate) {
+                generateBtn.disabled = true;
+                warning.style.display = 'block';
+                warning.innerHTML = '<strong>⚠️ Warning:</strong> Please select both start and end dates.';
+            } else if (new Date(startDate) > new Date(endDate)) {
+                generateBtn.disabled = true;
+                warning.style.display = 'block';
+                warning.innerHTML = '<strong>⚠️ Warning:</strong> Start date must be before or equal to end date.';
+            } else {
+                generateBtn.disabled = false;
+                warning.style.display = 'none';
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('startDate').addEventListener('change', validateDates);
+            document.getElementById('endDate').addEventListener('change', validateDates);
+            validateDates();
+        });
+    </script>
+</head>
+<body>
+    <div class='container'>
+        <a href='/reports' class='back-link'>← Back to Reports</a>
+        <h1>📋 Report 3: Completed Report</h1>
+
+        <div class='info-box'>
+            <h3>Report Configuration</h3>
+            <p><strong>This report includes all completed maintenance requests within a specific date range.</strong></p>
+            <ul>
+                <li><strong>Criteria:</strong> Status = 'Completed' and Date Completed within range</li>
+                <li><strong>Columns:</strong> Status, Building, Priority, Assigned To, Description, Corrective Action</li>
+                <li><strong>Sort Order:</strong> Date Completed (Oldest to Newest)</li>
+                <li><strong>Format:</strong> PDF (Portrait, 8.5×11 inches)</li>
+            </ul>
+        </div>
+
+        <form method='post' action='/reports/generate/3'>
+            <div class='form-section'>
+                <label>Select Date Range:</label>
+                <div class='date-inputs'>
+                    <div>
+                        <label for='startDate'>Start Date</label>
+                        <input type='date' id='startDate' name='startDate' required>
+                    </div>
+                    <div>
+                        <label for='endDate'>End Date</label>
+                        <input type='date' id='endDate' name='endDate' required>
+                    </div>
+                </div>
+            </div>
+
+            <div id='warning' class='warning'>
+                <strong>⚠️ Warning:</strong> Please select both start and end dates.
+            </div>
+
+            <div style='margin-top: 25px;'>
+                <button type='submit' id='generateBtn' class='btn'>📄 Generate PDF Report</button>
+                <a href='/reports' class='btn btn-secondary'>Cancel</a>
+            </div>
+        </form>
+    </div>
+</body>
+</html>";
+
+                return Results.Text(html, "text/html");
+            });
+
+            // Report 3 Generation - POST
+            app.MapPost("/reports/generate/3", async (HttpContext context, GoogleSheetsService sheetsService, PdfReportService pdfService) =>
+            {
+                var form = context.Request.Form;
+                var startDateStr = form["startDate"].ToString();
+                var endDateStr = form["endDate"].ToString();
+
+                if (string.IsNullOrEmpty(startDateStr) || string.IsNullOrEmpty(endDateStr))
+                {
+                    return Results.Redirect("/reports/configure/3");
+                }
+
+                if (!DateTime.TryParse(startDateStr, out var startDate) || !DateTime.TryParse(endDateStr, out var endDate))
+                {
+                    return Results.Redirect("/reports/configure/3");
+                }
+
+                if (startDate > endDate)
+                {
+                    return Results.Redirect("/reports/configure/3");
+                }
+
+                var allRequests = await sheetsService.GetAllRequestsAsync();
+                var pdfBytes = pdfService.GenerateCompletedReport(allRequests, startDate, endDate);
+
+                return Results.File(pdfBytes, "application/pdf", $"Workday_Completed_Report_{startDate:yyyyMMdd}_to_{endDate:yyyyMMdd}.pdf");
             });
 
 
