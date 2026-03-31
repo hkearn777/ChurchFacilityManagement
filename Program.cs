@@ -1223,6 +1223,14 @@ namespace ChurchFacilityManagement
                     </div>
                     <a href='/reports/configure/3' class='btn'>Configure & Generate</a>
                 </div>
+
+                <div class='report-item'>
+                    <div class='report-item-content'>
+                        <h3>📋 Report 4: Workday Report</h3>
+                        <p>Workday tasks grouped by assigned person/team and building</p>
+                    </div>
+                    <a href='/reports/configure/4' class='btn'>Configure & Generate</a>
+                </div>
             </div>
         </div>
 
@@ -1625,6 +1633,70 @@ namespace ChurchFacilityManagement
                 var pdfBytes = pdfService.GenerateCompletedReport(allRequests, startDate, endDate);
 
                 return Results.File(pdfBytes, "application/pdf", $"Workday_Completed_Report_{startDate:yyyyMMdd}_to_{endDate:yyyyMMdd}.pdf");
+            });
+
+            // Report 4 Configuration Page - Workday Report
+            app.MapGet("/reports/configure/4", async (GoogleSheetsService sheetsService) =>
+            {
+                var html = @"
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset='UTF-8'>
+    <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+    <title>Configure Report 4</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; background: #f5f5f5; }
+        .container { max-width: 700px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        h1 { color: #333; margin-top: 0; }
+        .back-link { display: inline-block; margin-bottom: 15px; color: #4285f4; text-decoration: none; }
+        .back-link:hover { text-decoration: underline; }
+        .info-box { background: #e3f2fd; padding: 20px; border-radius: 4px; margin: 20px 0; border-left: 4px solid #4285f4; }
+        .info-box h3 { margin-top: 0; color: #1565c0; }
+        .info-box ul { margin: 10px 0; padding-left: 20px; }
+        .info-box li { margin: 5px 0; color: #333; }
+        .btn { display: inline-block; padding: 12px 30px; background: #4285f4; color: white; text-decoration: none; border: none; border-radius: 4px; cursor: pointer; font-size: 1em; font-weight: bold; }
+        .btn:hover { background: #3367d6; }
+        .btn-secondary { background: #666; margin-left: 10px; }
+        .btn-secondary:hover { background: #555; }
+    </style>
+</head>
+<body>
+    <div class='container'>
+        <a href='/reports' class='back-link'>← Back to Reports</a>
+        <h1>📋 Report 4: Workday Report</h1>
+
+        <div class='info-box'>
+            <h3>Report Configuration</h3>
+            <p><strong>This report includes all maintenance requests with Status = 'Workday', grouped by assigned person/team.</strong></p>
+            <ul>
+                <li><strong>Criteria:</strong> Status = 'Workday'</li>
+                <li><strong>Grouping:</strong> By Assigned To</li>
+                <li><strong>Sort Order:</strong> By Building (within each assigned group)</li>
+                <li><strong>Columns:</strong> Building, Priority, Assigned To, Description, Notes</li>
+                <li><strong>Format:</strong> PDF (Portrait, 8.5×11 inches)</li>
+            </ul>
+            <p style='margin-top: 15px; color: #666;'>No configuration options are needed for this report.</p>
+        </div>
+
+        <form method='post' action='/reports/generate/4'>
+            <button type='submit' class='btn'>📄 Generate PDF Report</button>
+            <a href='/reports' class='btn btn-secondary'>Cancel</a>
+        </form>
+    </div>
+</body>
+</html>";
+
+                return Results.Text(html, "text/html");
+            });
+
+            // Report 4 Generation - POST
+            app.MapPost("/reports/generate/4", async (GoogleSheetsService sheetsService, PdfReportService pdfService) =>
+            {
+                var allRequests = await sheetsService.GetAllRequestsAsync();
+                var pdfBytes = pdfService.GenerateWorkdayReport(allRequests);
+
+                return Results.File(pdfBytes, "application/pdf", $"Workday_Report_{DateTime.Now:yyyyMMdd}.pdf");
             });
 
 

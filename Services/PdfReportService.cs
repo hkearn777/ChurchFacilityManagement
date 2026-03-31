@@ -358,5 +358,137 @@ namespace ChurchFacilityManagement.Services
 
             return document.GeneratePdf();
         }
+
+        public byte[] GenerateWorkdayReport(List<MaintenanceRequest> requests)
+        {
+            QuestPDF.Settings.License = LicenseType.Community;
+
+            // Filter by Workday status, group by Assigned To, then sort by Building within each group
+            var groupedByAssigned = requests
+                .Where(r => r.Status.Equals("Workday", StringComparison.OrdinalIgnoreCase))
+                .OrderBy(r => r.Assigned)
+                .ThenBy(r => r.Building)
+                .GroupBy(r => r.Assigned)
+                .OrderBy(g => g.Key);
+
+            var document = Document.Create(container =>
+            {
+                container.Page(page =>
+                {
+                    page.Size(PageSizes.Letter);
+                    page.Margin(0.5f, Unit.Inch);
+                    page.PageColor(Colors.White);
+                    page.DefaultTextStyle(x => x.FontSize(10).FontFamily("Arial"));
+
+                    page.Header()
+                        .AlignCenter()
+                        .Column(column =>
+                        {
+                            column.Item().Text("Church Facility Management")
+                                .FontSize(16)
+                                .Bold()
+                                .FontColor(Colors.Blue.Darken2);
+
+                            column.Item().Text("Workday Report")
+                                .FontSize(12)
+                                .SemiBold();
+
+                            column.Item().Text("Requests with Status: Workday")
+                                .FontSize(9)
+                                .FontColor(Colors.Grey.Darken2);
+
+                            column.Item().Text($"Generated: {DateTime.Now:yyyy-MM-dd HH:mm}")
+                                .FontSize(9)
+                                .FontColor(Colors.Grey.Darken1);
+                        });
+
+                    page.Content()
+                        .Column(column =>
+                        {
+                            if (groupedByAssigned.Any())
+                            {
+                                var assignedGroups = groupedByAssigned.ToList();
+                                for (int i = 0; i < assignedGroups.Count; i++)
+                                {
+                                    var assignedGroup = assignedGroups[i];
+
+                                    column.Item().PaddingTop(0.2f, Unit.Inch).Column(assignedColumn =>
+                                    {
+                                        assignedColumn.Item().Text($"Assigned To: {assignedGroup.Key}")
+                                            .FontSize(12)
+                                            .Bold()
+                                            .FontColor(Colors.Blue.Darken1);
+
+                                        assignedColumn.Item().PaddingTop(5).Table(table =>
+                                        {
+                                            table.ColumnsDefinition(columns =>
+                                            {
+                                                columns.RelativeColumn(2); // Building
+                                                columns.RelativeColumn(1.5f); // Priority
+                                                columns.RelativeColumn(2); // Assigned To
+                                                columns.RelativeColumn(4); // Description
+                                                columns.RelativeColumn(3); // Notes
+                                            });
+
+                                            // Header
+                                            table.Header(header =>
+                                            {
+                                                header.Cell().Background(Colors.Blue.Lighten2).Padding(5).Text("Building").Bold();
+                                                header.Cell().Background(Colors.Blue.Lighten2).Padding(5).Text("Priority").Bold();
+                                                header.Cell().Background(Colors.Blue.Lighten2).Padding(5).Text("Assigned To").Bold();
+                                                header.Cell().Background(Colors.Blue.Lighten2).Padding(5).Text("Description").Bold();
+                                                header.Cell().Background(Colors.Blue.Lighten2).Padding(5).Text("Notes").Bold();
+                                            });
+
+                                            // Data rows - already sorted by Building
+                                            foreach (var request in assignedGroup)
+                                            {
+                                                var priorityText = request.Priority switch
+                                                {
+                                                    "1" => "High",
+                                                    "2" => "Normal",
+                                                    "3" => "Low",
+                                                    _ => request.Priority
+                                                };
+
+                                                table.Cell().Border(1).BorderColor(Colors.Grey.Lighten2).Padding(5).Text(request.Building);
+                                                table.Cell().Border(1).BorderColor(Colors.Grey.Lighten2).Padding(5).Text(priorityText);
+                                                table.Cell().Border(1).BorderColor(Colors.Grey.Lighten2).Padding(5).Text(request.Assigned);
+                                                table.Cell().Border(1).BorderColor(Colors.Grey.Lighten2).Padding(5).Text(request.Description);
+                                                table.Cell().Border(1).BorderColor(Colors.Grey.Lighten2).Padding(5).Text(request.Notes);
+                                            }
+                                        });
+                                    });
+
+                                    // Add page break after each assignee except the last one
+                                    if (i < assignedGroups.Count - 1)
+                                    {
+                                        column.Item().PageBreak();
+                                    }
+                                }
+                            }
+                            else
+                            {
+                                column.Item().PaddingTop(50).AlignCenter().Text("No requests found with status 'Workday'.")
+                                    .FontSize(12)
+                                    .FontColor(Colors.Grey.Darken1);
+                            }
+                        });
+
+                    page.Footer()
+                        .Height(0.5f, Unit.Inch)
+                        .AlignCenter()
+                        .Text(text =>
+                        {
+                            text.Span("Page ");
+                            text.CurrentPageNumber();
+                            text.Span(" of ");
+                            text.TotalPages();
+                        });
+                });
+            });
+
+            return document.GeneratePdf();
+        }
     }
 }
