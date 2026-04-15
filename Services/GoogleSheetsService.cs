@@ -449,14 +449,14 @@ namespace ChurchFacilityManagement.Services
                     }
 
                     _logger.LogInformation($"Loaded {dropdowns.StatusColors.Count} status colors");
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "Could not read status colors, will use default styling");
-                }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Could not read status colors, will use default styling");
+                    }
 
-                _logger.LogInformation($"Loaded dropdowns: {dropdowns.Buildings.Count} buildings, {dropdowns.Priorities.Count} priorities, {dropdowns.Statuses.Count} statuses, {dropdowns.RequestMethods.Count} request methods");
-                return dropdowns;
+                    _logger.LogInformation($"Loaded dropdowns: {dropdowns.Buildings.Count} buildings, {dropdowns.Priorities.Count} priorities, {dropdowns.Statuses.Count} statuses, {dropdowns.RequestMethods.Count} request methods");
+                    return dropdowns;
             }
             catch (Exception ex)
             {
