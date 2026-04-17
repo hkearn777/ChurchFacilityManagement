@@ -416,6 +416,8 @@ namespace ChurchFacilityManagement.Services
                             var rowData = sheet.Data[0].RowData;
                             if (rowData != null)
                             {
+                                _logger.LogInformation($"Processing {rowData.Count} rows of color data for {dropdowns.Statuses.Count} statuses");
+
                                 for (int i = 0; i < rowData.Count && i < dropdowns.Statuses.Count; i++)
                                 {
                                     var cellData = rowData[i].Values?[0];
@@ -423,25 +425,34 @@ namespace ChurchFacilityManagement.Services
                                     var backgroundColor = cellData?.UserEnteredFormat?.BackgroundColor 
                                                          ?? cellData?.EffectiveFormat?.BackgroundColor;
 
+                                    var statusValue = dropdowns.Statuses[i];
+
                                     if (backgroundColor != null)
                                     {
+                                        var r = backgroundColor.Red ?? 1.0f;
+                                        var g = backgroundColor.Green ?? 1.0f;
+                                        var b = backgroundColor.Blue ?? 1.0f;
+
                                         // Check if the color is essentially white (default background)
-                                        var isWhite = (backgroundColor.Red ?? 1.0f) > 0.95f &&
-                                                     (backgroundColor.Green ?? 1.0f) > 0.95f &&
-                                                     (backgroundColor.Blue ?? 1.0f) > 0.95f;
+                                        var isWhite = r > 0.95f && g > 0.95f && b > 0.95f;
 
                                         var cssColor = ConvertGoogleColorToCss(backgroundColor);
-                                        var statusValue = dropdowns.Statuses[i];
+
+                                        _logger.LogInformation($"Status '{statusValue}' at index {i}: RGB=({r:F3}, {g:F3}, {b:F3}), CSS='{cssColor}', IsWhite={isWhite}");
 
                                         if (!isWhite)
                                         {
                                             dropdowns.StatusColors[statusValue] = cssColor;
-                                            _logger.LogInformation($"Mapped status '{statusValue}' to color '{cssColor}'");
+                                            _logger.LogInformation($"✓ Mapped status '{statusValue}' to color '{cssColor}'");
                                         }
                                         else
                                         {
-                                            _logger.LogInformation($"Skipped status '{statusValue}' - color is white/default ('{cssColor}')");
+                                            _logger.LogInformation($"✗ Skipped status '{statusValue}' - color is white/default ('{cssColor}')");
                                         }
+                                    }
+                                    else
+                                    {
+                                        _logger.LogInformation($"✗ Status '{statusValue}' at index {i}: No background color found");
                                     }
                                 }
                             }
