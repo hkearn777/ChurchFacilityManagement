@@ -203,13 +203,6 @@ namespace ChurchFacilityManagement
         th { background: #4285f4; color: white; padding: 12px 8px; text-align: left; font-size: 0.85em; }
         td { padding: 10px 8px; border: 1px solid #ddd; font-size: 0.85em; }
         tbody tr:hover { filter: brightness(0.95); cursor: pointer; }
-        .priority-high { color: #d93025; font-weight: bold; }
-        .priority-normal { color: #4285f4; }
-        .priority-low { color: #34a853; }
-        .status-badge { display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 0.75em; }
-        .status-progress { background: #fef7e0; color: #5f4b00; }
-        .status-completed { background: #e6f4ea; color: #1e7e34; }
-        .status-awp { background: #fee; color: #c00; }
         .actions { white-space: nowrap; }
         @media (max-width: 768px) {
             body { padding: 10px; }
@@ -287,22 +280,6 @@ namespace ChurchFacilityManagement
 
                     foreach (var req in sortedRequests)
                     {
-                        var priorityClass = req.Priority switch
-                        {
-                            "1" => "priority-high",
-                            "2" => "priority-normal",
-                            "3" => "priority-low",
-                            _ => ""
-                        };
-
-                        var statusClass = req.Status switch
-                        {
-                            "In Progress" => "status-progress",
-                            "Completed" => "status-completed",
-                            "AWP" => "status-awp",
-                            _ => ""
-                        };
-
                         var priorityText = req.Priority switch
                         {
                             "1" => "High",
@@ -311,19 +288,15 @@ namespace ChurchFacilityManagement
                             _ => req.Priority
                         };
 
-                        var rowStyle = !string.IsNullOrEmpty(req.StatusColor) 
-                            ? $"style='background-color: {req.StatusColor}; opacity: 0.85;'" 
-                            : "";
-
                         html += $@"
-                <tr {rowStyle}>
+                <tr>
                     <td>{req.Id}</td>
                     <td>{req.ReportDate:yyyy-MM-dd}</td>
                     <td>{TruncateText(req.Description, 50)}</td>
                     <td>{req.RequestedBy}</td>
                     <td>{req.Building}</td>
-                    <td class='{priorityClass}'>{priorityText}</td>
-                    <td><span class='status-badge {statusClass}'>{req.Status}</span></td>
+                    <td>{priorityText}</td>
+                    <td>{req.Status}</td>
                     <td>{req.Assigned}</td>
                     <td>{(req.DueDate.HasValue ? req.DueDate.Value.ToString("yyyy-MM-dd") : "")}</td>
                     <td class='actions'>
