@@ -370,7 +370,7 @@ namespace ChurchFacilityManagement.Services
         {
             var service = await GetSheetsServiceAsync();
             var spreadsheetId = _configuration["GoogleSheets:SpreadsheetId"];
-            var range = $"{DROPDOWNS_SHEET}!A2:D";
+            var range = $"{DROPDOWNS_SHEET}!A2:E";
 
             var dropdowns = new DropdownValues();
 
@@ -396,7 +396,21 @@ namespace ChurchFacilityManagement.Services
 
                         if (row.Count > 3 && !string.IsNullOrWhiteSpace(row[3].ToString()))
                             dropdowns.RequestMethods.Add(row[3].ToString()!.Trim());
+
+                        // Column E contains the status values that should be selected by default
+                        if (row.Count > 4 && !string.IsNullOrWhiteSpace(row[4].ToString()))
+                        {
+                            var selectedStatus = row[4].ToString()!.Trim();
+                            if (!dropdowns.SelectedStatuses.Contains(selectedStatus, StringComparer.OrdinalIgnoreCase))
+                            {
+                                dropdowns.SelectedStatuses.Add(selectedStatus);
+                                _logger.LogInformation($"✓ Added '{selectedStatus}' to selected statuses");
+                            }
+                        }
                     }
+
+                    _logger.LogInformation($"Total selected statuses: {dropdowns.SelectedStatuses.Count} (from column E)");
+                    _logger.LogInformation($"Selected statuses: {string.Join(", ", dropdowns.SelectedStatuses)}");
                 }
 
                 // Now get the cell formatting for Status column (column C) to read background colors

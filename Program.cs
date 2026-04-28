@@ -146,7 +146,7 @@ namespace ChurchFacilityManagement
                 var dropdowns = await sheetsService.GetDropdownValuesAsync();
 
                 // Filter out null values to ensure non-nullable string array
-                var filterStatuses = context.Request.Query["status"].Where(s => !string.IsNullOrEmpty(s)).Select(s => s!).ToArray();
+                var queryFilterStatuses = context.Request.Query["status"].Where(s => !string.IsNullOrEmpty(s)).Select(s => s!).ToArray();
                 var filterPriority = context.Request.Query["priority"].ToString();
                 var filterBuilding = context.Request.Query["building"].ToString();
                 var searchText = context.Request.Query["search"].ToString();
@@ -156,9 +156,15 @@ namespace ChurchFacilityManagement
                 if (string.IsNullOrEmpty(sortOrder))
                     sortOrder = "desc";
 
-                // If no statuses selected, show all; otherwise filter by selected statuses
-                if (filterStatuses.Length > 0)
-                    requests = requests.Where(r => filterStatuses.Contains(r.Status, StringComparer.OrdinalIgnoreCase)).ToList();
+                // Determine which statuses to use for filtering
+                // If no status filter in query string, use the default selected statuses from spreadsheet
+                var effectiveFilterStatuses = queryFilterStatuses.Length > 0 
+                    ? queryFilterStatuses 
+                    : (dropdowns.SelectedStatuses.Count > 0 ? dropdowns.SelectedStatuses.ToArray() : Array.Empty<string>());
+
+                // If statuses selected (either from query or defaults), filter by selected statuses
+                if (effectiveFilterStatuses.Length > 0)
+                    requests = requests.Where(r => effectiveFilterStatuses.Contains(r.Status, StringComparer.OrdinalIgnoreCase)).ToList();
 
                 if (!string.IsNullOrEmpty(filterPriority))
                     requests = requests.Where(r => r.Priority.Equals(filterPriority, StringComparison.OrdinalIgnoreCase)).ToList();
@@ -191,10 +197,13 @@ namespace ChurchFacilityManagement
         .btn-danger { background: #d93025; }
         .btn-danger:hover { background: #b52a1f; }
         .btn-small { padding: 6px 12px; font-size: 0.8em; }
+        .btn-link { background: none; color: #4285f4; text-decoration: underline; padding: 4px 8px; font-size: 0.85em; }
+        .btn-link:hover { background: #e8f0fe; color: #3367d6; }
         .filters { background: #f8f9fa; padding: 15px; border-radius: 4px; margin-bottom: 20px; }
         .filter-group { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
         .filter-group label { font-weight: bold; }
         .filter-group select, .filter-group input { padding: 8px; border: 1px solid #ddd; border-radius: 4px; }
+        .status-filter-row { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; }
         .checkbox-group { display: flex; gap: 15px; flex-wrap: wrap; align-items: center; background: white; padding: 10px; border: 1px solid #ddd; border-radius: 4px; }
         .checkbox-group label { font-weight: normal; display: flex; align-items: center; gap: 5px; cursor: pointer; }
         .checkbox-group input[type=""checkbox""] { cursor: pointer; width: 16px; height: 16px; }
@@ -211,6 +220,23 @@ namespace ChurchFacilityManagement
             .filter-group { flex-direction: column; align-items: stretch; }
         }
     </style>
+    <script>
+        const defaultStatuses = " + System.Text.Json.JsonSerializer.Serialize(dropdowns.SelectedStatuses) + @";
+
+        function selectAllStatuses() {
+            const checkboxes = document.querySelectorAll('input[name=""status""]');
+            checkboxes.forEach(cb => cb.checked = true);
+            document.querySelector('form').submit();
+        }
+
+        function applyDefaultFilter() {
+            const checkboxes = document.querySelectorAll('input[name=""status""]');
+            checkboxes.forEach(cb => {
+                cb.checked = defaultStatuses.includes(cb.value);
+            });
+            document.querySelector('form').submit();
+        }
+    </script>
 </head>
 <body>
     <div class='container'>
@@ -219,7 +245,7 @@ namespace ChurchFacilityManagement
             <div>
                 <a href='/request/new' class='btn btn-success'>+ New Request</a>
                 <a href='/reports' class='btn'>📊 Reports</a>
-                <a href='/?sort=" + (sortOrder == "desc" ? "asc" : "desc") + (filterStatuses.Length > 0 ? string.Concat(filterStatuses.Select(s => "&status=" + Uri.EscapeDataString(s ?? ""))) : "") + (string.IsNullOrEmpty(filterPriority) ? "" : "&priority=" + filterPriority) + (string.IsNullOrEmpty(filterBuilding) ? "" : "&building=" + filterBuilding) + (string.IsNullOrEmpty(searchText) ? "" : "&search=" + searchText) + @"' class='btn' title='Toggle sort order'>
+                <a href='/?sort=" + (sortOrder == "desc" ? "asc" : "desc") + (queryFilterStatuses.Length > 0 ? string.Concat(queryFilterStatuses.Select(s => "&status=" + Uri.EscapeDataString(s ?? ""))) : "") + (string.IsNullOrEmpty(filterPriority) ? "" : "&priority=" + filterPriority) + (string.IsNullOrEmpty(filterBuilding) ? "" : "&building=" + filterBuilding) + (string.IsNullOrEmpty(searchText) ? "" : "&search=" + searchText) + @"' class='btn' title='Toggle sort order'>
                     " + (sortOrder == "desc" ? "📅 Newest First ▼" : "📅 Oldest First ▲") + @"
                 </a>
             </div>
@@ -227,12 +253,15 @@ namespace ChurchFacilityManagement
 
         <div class='filters'>
             <form method='get'>
-                <div class='filter-group'>
+                <div class='status-filter-row'>
                     <label>Status:</label>
-                    <div class='checkbox-group'>
-                        " + GenerateStatusCheckboxes(dropdowns.Statuses, filterStatuses) + @"
-                    </div>
-
+                    <button type='button' class='btn btn-link' onclick='selectAllStatuses()'>Select All</button>
+                    <button type='button' class='btn btn-link' onclick='applyDefaultFilter()'>Default Filter</button>
+                </div>
+                <div class='checkbox-group'>
+                    " + GenerateStatusCheckboxes(dropdowns.Statuses, queryFilterStatuses, dropdowns.SelectedStatuses) + @"
+                </div>
+                <div class='filter-group' style='margin-top: 10px;'>
                     <label>Priority:</label>
                     <select name='priority' onchange='this.form.submit()'>
                         <option value=''>All</option>
@@ -1898,14 +1927,16 @@ namespace ChurchFacilityManagement
             return html;
         }
 
-        private static string GenerateStatusCheckboxes(List<string> statuses, string[] selectedStatuses)
+        private static string GenerateStatusCheckboxes(List<string> statuses, string[] selectedStatuses, List<string> defaultSelectedStatuses)
         {
             var html = "";
             foreach (var status in statuses)
             {
-                // If no filters selected (empty array), check all boxes by default
-                // Otherwise, only check the selected ones
-                var isChecked = selectedStatuses.Length == 0 || selectedStatuses.Contains(status, StringComparer.OrdinalIgnoreCase);
+                // If no filters selected (empty array), use default selected statuses from spreadsheet
+                // Otherwise, only check the selected ones from the filter
+                var isChecked = selectedStatuses.Length > 0 
+                    ? selectedStatuses.Contains(status, StringComparer.OrdinalIgnoreCase)
+                    : defaultSelectedStatuses.Contains(status, StringComparer.OrdinalIgnoreCase);
                 var checkedAttr = isChecked ? " checked" : "";
 
                 html += $@"
