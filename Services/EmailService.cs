@@ -210,5 +210,133 @@ namespace ChurchFacilityManagement.Services
 </body>
 </html>";
         }
+
+        public async Task<bool> SendApproverResponseNotificationAsync(int requestId, string description, string requestedBy, string responseAction, string managerEmail)
+        {
+            try
+            {
+                _logger.LogInformation($"Attempting to send approver response notification for request #{requestId} to manager email: {managerEmail}");
+
+                var smtpHost = _configuration["Email:SmtpHost"];
+                var smtpPort = int.Parse(_configuration["Email:SmtpPort"] ?? "587");
+                var fromEmail = _configuration["Email:FromEmail"];
+                var fromPassword = _configuration["Email:FromPassword"];
+                var replyToEmail = _configuration["Email:ReplyToEmail"];
+
+                // Check for password in environment variable (for Cloud Run)
+                if (string.IsNullOrEmpty(fromPassword))
+                {
+                    fromPassword = Environment.GetEnvironmentVariable("Email__FromPassword");
+                }
+
+                if (string.IsNullOrEmpty(smtpHost))
+                {
+                    _logger.LogWarning("SMTP Host is not configured. Skipping approver response notification.");
+                    return false;
+                }
+
+                if (string.IsNullOrEmpty(fromEmail))
+                {
+                    _logger.LogWarning("From Email is not configured. Skipping approver response notification.");
+                    return false;
+                }
+
+                if (string.IsNullOrEmpty(fromPassword))
+                {
+                    _logger.LogWarning("From Password is not configured. Skipping approver response notification.");
+                    return false;
+                }
+
+                if (string.IsNullOrEmpty(managerEmail))
+                {
+                    _logger.LogWarning("Manager Email is empty or null. Skipping approver response notification.");
+                    return false;
+                }
+
+                using var smtpClient = new SmtpClient(smtpHost)
+                {
+                    Port = smtpPort,
+                    Credentials = new NetworkCredential(fromEmail, fromPassword),
+                    EnableSsl = true
+                };
+
+                var mailMessage = new MailMessage
+                {
+                    From = new MailAddress(fromEmail, "Church Facilities Management"),
+                    Subject = $"Approver Response: Request #{requestId} - {responseAction}",
+                    Body = GenerateApproverResponseEmailBody(requestId, description, requestedBy, responseAction),
+                    IsBodyHtml = true
+                };
+
+                mailMessage.To.Add(managerEmail);
+
+                if (!string.IsNullOrEmpty(replyToEmail))
+                {
+                    mailMessage.ReplyToList.Add(new MailAddress(replyToEmail, "Facilities Manager"));
+                }
+
+                _logger.LogInformation($"Sending email to {managerEmail} via SMTP server {smtpHost}:{smtpPort}");
+                await smtpClient.SendMailAsync(mailMessage);
+                _logger.LogInformation($"Approver response notification email sent for request #{requestId} to {managerEmail}");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Failed to send approver response notification email for request #{requestId}");
+                return false;
+            }
+        }
+
+        private string GenerateApproverResponseEmailBody(int requestId, string description, string requestedBy, string responseAction)
+        {
+            var actionColor = responseAction switch
+            {
+                "Approved" => "#34a853",
+                "Not Approved" => "#d93025",
+                "Deferred" => "#fbbc04",
+                _ => "#4285f4"
+            };
+
+            var actionIcon = responseAction switch
+            {
+                "Approved" => "✅",
+                "Not Approved" => "❌",
+                "Deferred" => "⏸️",
+                _ => "📋"
+            };
+
+            return $@"
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset='UTF-8'>
+    <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+</head>
+<body style='font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;'>
+    <div style='background: {actionColor}; color: white; padding: 20px; border-radius: 8px 8px 0 0;'>
+        <h1 style='margin: 0; font-size: 1.5em;'>{actionIcon} Approver Response Received</h1>
+    </div>
+
+    <div style='background: #f8f9fa; padding: 20px; border: 1px solid #ddd; border-top: none; border-radius: 0 0 8px 8px;'>
+        <p style='font-size: 1.1em; margin-top: 0;'>An approver has responded to a maintenance request.</p>
+
+        <div style='background: white; padding: 15px; border-radius: 4px; margin: 15px 0;'>
+            <p><strong>Request ID:</strong> #{requestId}</p>
+            <p><strong>Description:</strong> {System.Web.HttpUtility.HtmlEncode(description)}</p>
+            <p><strong>Requested By:</strong> {System.Web.HttpUtility.HtmlEncode(requestedBy)}</p>
+            <p><strong>Approver Action:</strong> <span style='color: {actionColor}; font-weight: bold;'>{responseAction}</span></p>
+        </div>
+
+        <p style='font-size: 0.9em; color: #666; margin-top: 20px;'>
+            You can view the full request details and take any necessary follow-up actions in the facility management system.
+        </p>
+    </div>
+
+    <div style='text-align: center; font-size: 0.8em; color: #999; margin-top: 20px;'>
+        <p>Church Facility Management System</p>
+    </div>
+</body>
+</html>";
+        }
     }
 }

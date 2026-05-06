@@ -899,39 +899,135 @@ namespace ChurchFacilityManagement
             });
 
             // Approve a request
-            app.MapGet("/approver/approve/{id}", async (int id, GoogleSheetsService sheetsService) =>
+            app.MapGet("/approver/approve/{id}", async (int id, GoogleSheetsService sheetsService, EmailService emailService, IConfiguration configuration, ILogger<Program> logger) =>
             {
+                logger.LogInformation($"Approve endpoint called for request ID: {id}");
                 var request = await sheetsService.GetRequestByIdAsync(id);
                 if (request != null)
                 {
                     request.Status = "Approved";
+
+                    // Add approver response log to Notes
+                    var responseLog = $"Approver email response on {DateTime.Now:yyyy-MM-dd HH:mm:ss}";
+                    request.Notes = string.IsNullOrWhiteSpace(request.Notes) 
+                        ? responseLog 
+                        : $"{request.Notes}\n{responseLog}";
+
                     await sheetsService.UpdateRequestAsync(request);
+
+                    // Send email notification to Manager
+                    var managerEmail = configuration["Email:ManagerEmail"];
+                    logger.LogInformation($"Manager email from config: {managerEmail ?? "NULL"}");
+
+                    if (!string.IsNullOrEmpty(managerEmail))
+                    {
+                        logger.LogInformation($"Sending approval notification email to manager: {managerEmail}");
+                        var emailSent = await emailService.SendApproverResponseNotificationAsync(
+                            request.Id, 
+                            request.Description, 
+                            request.RequestedBy, 
+                            "Approved", 
+                            managerEmail);
+                        logger.LogInformation($"Email send result: {emailSent}");
+                    }
+                    else
+                    {
+                        logger.LogWarning("Manager email is null or empty, email not sent");
+                    }
+                }
+                else
+                {
+                    logger.LogWarning($"Request ID {id} not found");
                 }
                 return Results.Redirect("/approver");
             });
 
             // Reject a request
-            app.MapGet("/approver/reject/{id}", async (int id, GoogleSheetsService sheetsService) =>
+            app.MapGet("/approver/reject/{id}", async (int id, GoogleSheetsService sheetsService, EmailService emailService, IConfiguration configuration, ILogger<Program> logger) =>
             {
+                logger.LogInformation($"Reject endpoint called for request ID: {id}");
                 var request = await sheetsService.GetRequestByIdAsync(id);
                 if (request != null)
                 {
                     request.Status = "Not Approved";
+
+                    // Add approver response log to Notes
+                    var responseLog = $"Approver email response on {DateTime.Now:yyyy-MM-dd HH:mm:ss}";
+                    request.Notes = string.IsNullOrWhiteSpace(request.Notes) 
+                        ? responseLog 
+                        : $"{request.Notes}\n{responseLog}";
+
                     await sheetsService.UpdateRequestAsync(request);
+
+                    // Send email notification to Manager
+                    var managerEmail = configuration["Email:ManagerEmail"];
+                    logger.LogInformation($"Manager email from config: {managerEmail ?? "NULL"}");
+
+                    if (!string.IsNullOrEmpty(managerEmail))
+                    {
+                        logger.LogInformation($"Sending rejection notification email to manager: {managerEmail}");
+                        var emailSent = await emailService.SendApproverResponseNotificationAsync(
+                            request.Id, 
+                            request.Description, 
+                            request.RequestedBy, 
+                            "Not Approved", 
+                            managerEmail);
+                        logger.LogInformation($"Email send result: {emailSent}");
+                    }
+                    else
+                    {
+                        logger.LogWarning("Manager email is null or empty, email not sent");
+                    }
+                }
+                else
+                {
+                    logger.LogWarning($"Request ID {id} not found");
                 }
                 return Results.Redirect("/approver");
             });
 
             // Defer a request with notes
-            app.MapGet("/approver/defer/{id}", async (int id, string notes, GoogleSheetsService sheetsService) =>
+            app.MapGet("/approver/defer/{id}", async (int id, string notes, GoogleSheetsService sheetsService, EmailService emailService, IConfiguration configuration, ILogger<Program> logger) =>
             {
+                logger.LogInformation($"Defer endpoint called for request ID: {id}");
                 var request = await sheetsService.GetRequestByIdAsync(id);
                 if (request != null)
                 {
                     request.Status = "Deferred";
                     var deferredDate = DateTime.Now.ToString("yyyy-MM-dd");
-                    request.Notes = $"Deferred {deferredDate} - {notes}";
+                    var responseLog = $"Approver email response on {DateTime.Now:yyyy-MM-dd HH:mm:ss}";
+                    var deferredNote = $"Deferred {deferredDate} - {notes}";
+
+                    // Combine deferred notes with response log
+                    request.Notes = string.IsNullOrWhiteSpace(request.Notes) 
+                        ? $"{deferredNote}\n{responseLog}" 
+                        : $"{request.Notes}\n{deferredNote}\n{responseLog}";
+
                     await sheetsService.UpdateRequestAsync(request);
+
+                    // Send email notification to Manager
+                    var managerEmail = configuration["Email:ManagerEmail"];
+                    logger.LogInformation($"Manager email from config: {managerEmail ?? "NULL"}");
+
+                    if (!string.IsNullOrEmpty(managerEmail))
+                    {
+                        logger.LogInformation($"Sending defer notification email to manager: {managerEmail}");
+                        var emailSent = await emailService.SendApproverResponseNotificationAsync(
+                            request.Id, 
+                            request.Description, 
+                            request.RequestedBy, 
+                            "Deferred", 
+                            managerEmail);
+                        logger.LogInformation($"Email send result: {emailSent}");
+                    }
+                    else
+                    {
+                        logger.LogWarning("Manager email is null or empty, email not sent");
+                    }
+                }
+                else
+                {
+                    logger.LogWarning($"Request ID {id} not found");
                 }
                 return Results.Redirect("/approver");
             });

@@ -366,6 +366,33 @@ namespace ChurchFacilityManagement.Services
             }
         }
 
+        public async Task<string?> GetManagerEmailAsync()
+        {
+            try
+            {
+                var roles = await GetRolesAsync();
+                _logger.LogInformation($"Found {roles.Count} roles in the Roles sheet");
+
+                var managerRole = roles.FirstOrDefault(r => r.RoleName.Equals("Manager", StringComparison.OrdinalIgnoreCase));
+
+                if (managerRole != null)
+                {
+                    _logger.LogInformation($"Found Manager role: {managerRole.PersonName}, Email: {managerRole.Contact}");
+                    return managerRole?.Contact;
+                }
+                else
+                {
+                    _logger.LogWarning("No Manager role found in Roles sheet");
+                    return null;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting manager email");
+                return null;
+            }
+        }
+
         public async Task<DropdownValues> GetDropdownValuesAsync()
         {
             var service = await GetSheetsServiceAsync();
