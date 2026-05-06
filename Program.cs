@@ -737,7 +737,7 @@ namespace ChurchFacilityManagement
                 var allRequests = await sheetsService.GetAllRequestsAsync();
                 var requestsNeedingApproval = allRequests.Where(r => r.Status.Equals("Need Approval", StringComparison.OrdinalIgnoreCase)).ToList();
 
-                var html = @"
+                var html = $@"
 <!DOCTYPE html>
 <html>
 <head>
@@ -745,75 +745,75 @@ namespace ChurchFacilityManagement
     <meta name='viewport' content='width=device-width, initial-scale=1.0'>
     <title>Approver Dashboard</title>
     <style>
-        body { font-family: Arial, sans-serif; padding: 20px; background: #f5f5f5; margin: 0; }
-        .container { max-width: 1400px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        h1 { color: #333; font-size: 1.8em; margin-top: 0; }
-        .count-badge { display: inline-block; background: #fbbc04; color: white; padding: 5px 15px; border-radius: 20px; font-size: 0.9em; margin-left: 10px; }
-        .table-wrapper { overflow-x: auto; margin-top: 20px; }
-        table { border-collapse: collapse; width: 100%; }
-        th { background: #4285f4; color: white; padding: 12px 8px; text-align: left; font-size: 0.85em; }
-        td { padding: 10px 8px; border: 1px solid #ddd; font-size: 0.85em; }
-        tr:hover { background: #f8f9fa; }
-        .btn { display: inline-block; padding: 8px 16px; color: white; text-decoration: none; border-radius: 4px; border: none; font-size: 0.85em; cursor: pointer; margin-right: 5px; }
-        .btn-approve { background: #34a853; }
-        .btn-approve:hover { background: #2d8e47; }
-        .btn-reject { background: #d93025; }
-        .btn-reject:hover { background: #b52a1f; }
-        .btn-defer { background: #fbbc04; }
-        .btn-defer:hover { background: #f9ab00; }
-        .btn-view { background: #4285f4; }
-        .btn-view:hover { background: #3367d6; }
-        .empty-state { text-align: center; padding: 40px; color: #666; }
-        .empty-state h2 { color: #34a853; }
-        .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.4); }
-        .modal-content { background-color: #fefefe; margin: 10% auto; padding: 30px; border: 1px solid #888; border-radius: 8px; width: 90%; max-width: 500px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        .modal-header { font-size: 1.3em; font-weight: bold; margin-bottom: 20px; color: #333; }
-        .modal-close { color: #aaa; float: right; font-size: 28px; font-weight: bold; line-height: 20px; cursor: pointer; }
-        .modal-close:hover, .modal-close:focus { color: #000; }
-        .modal-textarea { width: 100%; padding: 10px; margin: 10px 0 20px 0; border: 1px solid #ddd; border-radius: 4px; font-family: Arial, sans-serif; font-size: 0.9em; min-height: 100px; resize: vertical; }
-        .modal-buttons { text-align: right; margin-top: 20px; }
-        .modal-btn { padding: 10px 20px; margin-left: 10px; border: none; border-radius: 4px; cursor: pointer; font-size: 0.9em; }
-        .modal-btn-submit { background: #fbbc04; color: white; }
-        .modal-btn-submit:hover { background: #f9ab00; }
-        .modal-btn-cancel { background: #666; color: white; }
-        .modal-btn-cancel:hover { background: #555; }
-        @media (max-width: 768px) {
-            body { padding: 10px; }
-            .container { padding: 15px; }
-            table { font-size: 0.75em; }
-            .modal-content { width: 95%; margin: 20% auto; padding: 20px; }
-        }
+        body {{ font-family: Arial, sans-serif; padding: 20px; background: #f5f5f5; margin: 0; }}
+        .container {{ max-width: 1400px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }}
+        h1 {{ color: #333; font-size: 1.8em; margin-top: 0; }}
+        .count-badge {{ display: inline-block; background: #fbbc04; color: white; padding: 5px 15px; border-radius: 20px; font-size: 0.9em; margin-left: 10px; }}
+        .table-wrapper {{ overflow-x: auto; margin-top: 20px; }}
+        table {{ border-collapse: collapse; width: 100%; }}
+        th {{ background: #4285f4; color: white; padding: 12px 8px; text-align: left; font-size: 0.85em; }}
+        td {{ padding: 10px 8px; border: 1px solid #ddd; font-size: 0.85em; }}
+        tr:hover {{ background: #f8f9fa; }}
+        .btn {{ display: inline-block; padding: 8px 16px; color: white; text-decoration: none; border-radius: 4px; border: none; font-size: 0.85em; cursor: pointer; margin-right: 5px; }}
+        .btn-approve {{ background: #34a853; }}
+        .btn-approve:hover {{ background: #2d8e47; }}
+        .btn-reject {{ background: #d93025; }}
+        .btn-reject:hover {{ background: #b52a1f; }}
+        .btn-defer {{ background: #fbbc04; }}
+        .btn-defer:hover {{ background: #f9ab00; }}
+        .btn-view {{ background: #4285f4; }}
+        .btn-view:hover {{ background: #3367d6; }}
+        .empty-state {{ text-align: center; padding: 40px; color: #666; }}
+        .empty-state h2 {{ color: #34a853; }}
+        .modal {{ display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.4); }}
+        .modal-content {{ background-color: #fefefe; margin: 10% auto; padding: 30px; border: 1px solid #888; border-radius: 8px; width: 90%; max-width: 500px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }}
+        .modal-header {{ font-size: 1.3em; font-weight: bold; margin-bottom: 20px; color: #333; }}
+        .modal-close {{ color: #aaa; float: right; font-size: 28px; font-weight: bold; line-height: 20px; cursor: pointer; }}
+        .modal-close:hover, .modal-close:focus {{ color: #000; }}
+        .modal-textarea {{ width: 100%; padding: 10px; margin: 10px 0 20px 0; border: 1px solid #ddd; border-radius: 4px; font-family: Arial, sans-serif; font-size: 0.9em; min-height: 100px; resize: vertical; }}
+        .modal-buttons {{ text-align: right; margin-top: 20px; }}
+        .modal-btn {{ padding: 10px 20px; margin-left: 10px; border: none; border-radius: 4px; cursor: pointer; font-size: 0.9em; }}
+        .modal-btn-submit {{ background: #fbbc04; color: white; }}
+        .modal-btn-submit:hover {{ background: #f9ab00; }}
+        .modal-btn-cancel {{ background: #666; color: white; }}
+        .modal-btn-cancel:hover {{ background: #555; }}
+        @media (max-width: 768px) {{
+            body {{ padding: 10px; }}
+            .container {{ padding: 15px; }}
+            table {{ font-size: 0.75em; }}
+            .modal-content {{ width: 95%; margin: 20% auto; padding: 20px; }}
+        }}
     </style>
     <script>
-        function openDeferModal(requestId) {
+        function openDeferModal(requestId) {{
             document.getElementById('deferModal').style.display = 'block';
             document.getElementById('deferRequestId').value = requestId;
             document.getElementById('deferNotes').value = '';
             document.getElementById('deferNotes').focus();
-        }
+        }}
 
-        function closeDeferModal() {
+        function closeDeferModal() {{
             document.getElementById('deferModal').style.display = 'none';
-        }
+        }}
 
-        function submitDefer() {
+        function submitDefer() {{
             var requestId = document.getElementById('deferRequestId').value;
             var notes = document.getElementById('deferNotes').value.trim();
 
-            if (notes === '') {
+            if (notes === '') {{
                 alert('Please enter notes for the deferral.');
                 return;
-            }
+            }}
 
             window.location.href = '/approver/defer/' + requestId + '?notes=' + encodeURIComponent(notes);
-        }
+        }}
 
-        window.onclick = function(event) {
+        window.onclick = function(event) {{
             var modal = document.getElementById('deferModal');
-            if (event.target == modal) {
+            if (event.target == modal) {{
                 closeDeferModal();
-            }
-        }
+            }}
+        }}
     </script>
 </head>
 <body>
@@ -899,10 +899,11 @@ namespace ChurchFacilityManagement
             });
 
             // Approve a request
-            app.MapGet("/approver/approve/{id}", async (int id, GoogleSheetsService sheetsService, EmailService emailService, IConfiguration configuration, ILogger<Program> logger) =>
+            app.MapGet("/approver/approve/{id}", async (int id, GoogleSheetsService sheetsService, EmailService emailService, ILogger<Program> logger) =>
             {
                 logger.LogInformation($"Approve endpoint called for request ID: {id}");
                 var request = await sheetsService.GetRequestByIdAsync(id);
+
                 if (request != null)
                 {
                     request.Status = "Approved";
@@ -916,8 +917,8 @@ namespace ChurchFacilityManagement
                     await sheetsService.UpdateRequestAsync(request);
 
                     // Send email notification to Manager
-                    var managerEmail = configuration["Email:ManagerEmail"];
-                    logger.LogInformation($"Manager email from config: {managerEmail ?? "NULL"}");
+                    var managerEmail = await sheetsService.GetManagerEmailAsync();
+                    logger.LogInformation($"Manager email from Roles sheet: {managerEmail ?? "NULL"}");
 
                     if (!string.IsNullOrEmpty(managerEmail))
                     {
@@ -932,21 +933,23 @@ namespace ChurchFacilityManagement
                     }
                     else
                     {
-                        logger.LogWarning("Manager email is null or empty, email not sent");
+                        logger.LogWarning("Manager email not found in Roles sheet, email not sent");
                     }
                 }
                 else
                 {
                     logger.LogWarning($"Request ID {id} not found");
                 }
+
                 return Results.Redirect("/approver");
             });
 
             // Reject a request
-            app.MapGet("/approver/reject/{id}", async (int id, GoogleSheetsService sheetsService, EmailService emailService, IConfiguration configuration, ILogger<Program> logger) =>
+            app.MapGet("/approver/reject/{id}", async (int id, GoogleSheetsService sheetsService, EmailService emailService, ILogger<Program> logger) =>
             {
                 logger.LogInformation($"Reject endpoint called for request ID: {id}");
                 var request = await sheetsService.GetRequestByIdAsync(id);
+
                 if (request != null)
                 {
                     request.Status = "Not Approved";
@@ -960,8 +963,8 @@ namespace ChurchFacilityManagement
                     await sheetsService.UpdateRequestAsync(request);
 
                     // Send email notification to Manager
-                    var managerEmail = configuration["Email:ManagerEmail"];
-                    logger.LogInformation($"Manager email from config: {managerEmail ?? "NULL"}");
+                    var managerEmail = await sheetsService.GetManagerEmailAsync();
+                    logger.LogInformation($"Manager email from Roles sheet: {managerEmail ?? "NULL"}");
 
                     if (!string.IsNullOrEmpty(managerEmail))
                     {
@@ -976,21 +979,23 @@ namespace ChurchFacilityManagement
                     }
                     else
                     {
-                        logger.LogWarning("Manager email is null or empty, email not sent");
+                        logger.LogWarning("Manager email not found in Roles sheet, email not sent");
                     }
                 }
                 else
                 {
                     logger.LogWarning($"Request ID {id} not found");
                 }
+
                 return Results.Redirect("/approver");
             });
 
             // Defer a request with notes
-            app.MapGet("/approver/defer/{id}", async (int id, string notes, GoogleSheetsService sheetsService, EmailService emailService, IConfiguration configuration, ILogger<Program> logger) =>
+            app.MapGet("/approver/defer/{id}", async (int id, string notes, GoogleSheetsService sheetsService, EmailService emailService, ILogger<Program> logger) =>
             {
                 logger.LogInformation($"Defer endpoint called for request ID: {id}");
                 var request = await sheetsService.GetRequestByIdAsync(id);
+
                 if (request != null)
                 {
                     request.Status = "Deferred";
@@ -1006,8 +1011,8 @@ namespace ChurchFacilityManagement
                     await sheetsService.UpdateRequestAsync(request);
 
                     // Send email notification to Manager
-                    var managerEmail = configuration["Email:ManagerEmail"];
-                    logger.LogInformation($"Manager email from config: {managerEmail ?? "NULL"}");
+                    var managerEmail = await sheetsService.GetManagerEmailAsync();
+                    logger.LogInformation($"Manager email from Roles sheet: {managerEmail ?? "NULL"}");
 
                     if (!string.IsNullOrEmpty(managerEmail))
                     {
@@ -1022,13 +1027,14 @@ namespace ChurchFacilityManagement
                     }
                     else
                     {
-                        logger.LogWarning("Manager email is null or empty, email not sent");
+                        logger.LogWarning("Manager email not found in Roles sheet, email not sent");
                     }
                 }
                 else
                 {
                     logger.LogWarning($"Request ID {id} not found");
                 }
+
                 return Results.Redirect("/approver");
             });
 
