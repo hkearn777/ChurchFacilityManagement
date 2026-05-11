@@ -1232,8 +1232,18 @@ namespace ChurchFacilityManagement
                     }
                 }
 
+                // Add approval request log to Notes if status changed to Need Approval
+                if (oldStatus != "Need Approval" && newStatus == "Need Approval")
+                {
+                    var approvalLog = $"Approval request email sent on {DateTime.Now:yyyy-MM-dd HH:mm:ss}";
+                    request.Notes = string.IsNullOrWhiteSpace(request.Notes) 
+                        ? approvalLog 
+                        : $"{request.Notes}\n{approvalLog}";
+                }
+
                 await sheetsService.UpdateRequestAsync(request);
 
+                // Send email notification if status changed to Need Approval
                 if (oldStatus != "Need Approval" && newStatus == "Need Approval")
                 {
                     await emailService.SendApprovalNotificationAsync(request.Id, request.Description, request.RequestedBy);
