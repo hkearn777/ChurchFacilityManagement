@@ -1907,11 +1907,7 @@ namespace ChurchFacilityManagement
                 <label>Trade</label>
                 <select name='trade'>
                     <option value=''>Select...</option>
-                    <option value='Electrical'{(req.Trade == "Electrical" ? " selected" : "")}>Electrical</option>
-                    <option value='Plumbing'{(req.Trade == "Plumbing" ? " selected" : "")}>Plumbing</option>
-                    <option value='General'{(req.Trade == "General" ? " selected" : "")}>General</option>
-                    <option value='HVAC'{(req.Trade == "HVAC" ? " selected" : "")}>HVAC</option>
-                    <option value='Carpentry'{(req.Trade == "Carpentry" ? " selected" : "")}>Carpentry</option>
+                    {GenerateDropdownOptions(dropdowns.Trades, req.Trade)}
                 </select>
             </div>
             

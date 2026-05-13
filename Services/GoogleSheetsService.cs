@@ -397,7 +397,7 @@ namespace ChurchFacilityManagement.Services
         {
             var service = await GetSheetsServiceAsync();
             var spreadsheetId = _configuration["GoogleSheets:SpreadsheetId"];
-            var range = $"{DROPDOWNS_SHEET}!A2:E";
+            var range = $"{DROPDOWNS_SHEET}!A2:F";
 
             var dropdowns = new DropdownValues();
 
@@ -434,6 +434,10 @@ namespace ChurchFacilityManagement.Services
                                 _logger.LogInformation($"✓ Added '{selectedStatus}' to selected statuses");
                             }
                         }
+
+                        // Column F contains the trade values
+                        if (row.Count > 5 && !string.IsNullOrWhiteSpace(row[5].ToString()))
+                            dropdowns.Trades.Add(row[5].ToString()!.Trim());
                     }
 
                     _logger.LogInformation($"Total selected statuses: {dropdowns.SelectedStatuses.Count} (from column E)");
