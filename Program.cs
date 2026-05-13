@@ -304,8 +304,8 @@ namespace ChurchFacilityManagement
                 else
                 {
                     var sortedRequests = sortOrder == "asc" 
-                        ? requests.OrderBy(r => r.ReportDate) 
-                        : requests.OrderByDescending(r => r.ReportDate);
+                        ? requests.OrderBy(r => r.ReportDate).ThenByDescending(r => r.Id)
+                        : requests.OrderByDescending(r => r.ReportDate).ThenByDescending(r => r.Id);
 
                     foreach (var req in sortedRequests)
                     {
