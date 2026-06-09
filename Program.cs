@@ -623,6 +623,10 @@ namespace ChurchFacilityManagement
             {
                 var form = context.Request.Form;
 
+                // Parse date fields
+                DateTime? startDate = DateTime.TryParse(form["startDate"].ToString(), out var sd) ? sd : null;
+                DateTime? completedDate = DateTime.TryParse(form["completedDate"].ToString(), out var cd) ? cd : null;
+
                 var request = new MaintenanceRequest
                 {
                     Description = form["description"].ToString(),
@@ -636,6 +640,8 @@ namespace ChurchFacilityManagement
                     Trade = form["trade"].ToString(),
                     CorrectiveAction = form["correctiveAction"].ToString(),
                     DueDate = DateTime.TryParse(form["dueDate"].ToString(), out var dueDate) ? dueDate : null,
+                    StartDate = startDate,
+                    CompletedDate = completedDate,
                     Attachments = ""
                 };
 
@@ -1920,8 +1926,7 @@ namespace ChurchFacilityManagement
                 <label>Due Date</label>
                 <input type='date' name='dueDate' value='{(req.DueDate.HasValue ? req.DueDate.Value.ToString("yyyy-MM-dd") : "")}'>
             </div>
-            
-            {(isEdit ? $@"
+
             <div class='form-group'>
                 <label>Start Date</label>
                 <input type='date' name='startDate' value='{(req.StartDate.HasValue ? req.StartDate.Value.ToString("yyyy-MM-dd") : "")}'>
@@ -1930,7 +1935,8 @@ namespace ChurchFacilityManagement
             <div class='form-group'>
                 <label>Completed Date</label>
                 <input type='date' name='completedDate' value='{(req.CompletedDate.HasValue ? req.CompletedDate.Value.ToString("yyyy-MM-dd") : "")}'>
-            </div>" : "")}
+            </div>
+
 
             <div class='form-group'>
                 <label>Attachments (Upload Images)</label>
