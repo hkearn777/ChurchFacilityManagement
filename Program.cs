@@ -14,6 +14,7 @@ namespace ChurchFacilityManagement
             builder.Services.AddSingleton<DropboxService>();
             builder.Services.AddSingleton<EmailService>();
             builder.Services.AddSingleton<PdfReportService>();
+            builder.Services.AddHttpContextAccessor();
 
             var app = builder.Build();
 

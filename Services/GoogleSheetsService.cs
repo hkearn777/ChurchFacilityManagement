@@ -3,6 +3,8 @@ using Google.Apis.Sheets.v4;
 using Google.Apis.Sheets.v4.Data;
 using Google.Apis.Services;
 using ChurchFacilityManagement.Models;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.Extensions;
 
 namespace ChurchFacilityManagement.Services
 {
@@ -17,12 +19,96 @@ namespace ChurchFacilityManagement.Services
         private const string COMPLETED_SHEET = "Completed Tasks";
         private const string ROLES_SHEET = "Roles";
         private const string DROPDOWNS_SHEET = "Dropdowns";
+        private const string STATIC_VALUES_SHEET = "StaticValues";
 
-        public GoogleSheetsService(IConfiguration configuration, ILogger<GoogleSheetsService> logger, DropboxService dropboxService)
+        private readonly IHttpContextAccessor _httpContextAccessor;
+        private const string LOG_SHEET = "Log";
+        public GoogleSheetsService(IConfiguration configuration, ILogger<GoogleSheetsService> logger, DropboxService dropboxService, IHttpContextAccessor httpContextAccessor)
         {
             _configuration = configuration;
             _logger = logger;
             _dropboxService = dropboxService;
+            _httpContextAccessor = httpContextAccessor;
+        }
+
+        private async Task EnsureLogSheetExistsAsync(SheetsService service, string spreadsheetId)
+        {
+            var getRequest = service.Spreadsheets.Get(spreadsheetId);
+            getRequest.Fields = "sheets.properties";
+            var spreadsheet = await getRequest.ExecuteAsync();
+
+            var sheetExists = spreadsheet.Sheets?.Any(s => s.Properties?.Title == LOG_SHEET) ?? false;
+            if (!sheetExists)
+            {
+                _logger.LogInformation($"Creating Log sheet '{LOG_SHEET}'");
+                var addSheetRequest = new Request
+                {
+                    AddSheet = new AddSheetRequest
+                    {
+                        Properties = new SheetProperties { Title = LOG_SHEET }
+                    }
+                };
+
+                var batch = new BatchUpdateSpreadsheetRequest { Requests = new List<Request> { addSheetRequest } };
+                await service.Spreadsheets.BatchUpdate(batch, spreadsheetId).ExecuteAsync();
+
+                // Add header row
+                var headerRange = $"{LOG_SHEET}!A1:E1";
+                var header = new ValueRange
+                {
+                    Values = new List<IList<object>> { new List<object> { "Timestamp", "Operation", "RowId", "SourceUrl", "Status" } }
+                };
+                var appendRequest = service.Spreadsheets.Values.Append(header, spreadsheetId, headerRange);
+                appendRequest.ValueInputOption = SpreadsheetsResource.ValuesResource.AppendRequest.ValueInputOptionEnum.RAW;
+                await appendRequest.ExecuteAsync();
+            }
+        }
+
+        private string GetCurrentRequestUrl()
+        {
+            try
+            {
+                var ctx = _httpContextAccessor?.HttpContext;
+                if (ctx == null) return string.Empty;
+                return ctx.Request.GetDisplayUrl();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to get request URL");
+                return string.Empty;
+            }
+        }
+
+        private async Task WriteLogAsync(string operation, int? rowId, bool success, string? errorMessage = null)
+        {
+            try
+            {
+                var service = await GetSheetsServiceAsync();
+                var spreadsheetId = _configuration["GoogleSheets:SpreadsheetId"];
+
+                await EnsureLogSheetExistsAsync(service, spreadsheetId);
+
+                var statusText = success ? "Success" : (errorMessage ?? "Error");
+                var timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+                var sourceUrl = GetCurrentRequestUrl();
+
+                var range = $"{LOG_SHEET}!A:E";
+                var valueRange = new ValueRange
+                {
+                    Values = new List<IList<object>>
+                    {
+                        new List<object> { timestamp, operation, rowId?.ToString() ?? "", sourceUrl, statusText }
+                    }
+                };
+
+                var appendRequest = service.Spreadsheets.Values.Append(valueRange, spreadsheetId, range);
+                appendRequest.ValueInputOption = SpreadsheetsResource.ValuesResource.AppendRequest.ValueInputOptionEnum.RAW;
+                await appendRequest.ExecuteAsync();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to write operation log to Log sheet");
+            }
         }
 
         private async Task<SheetsService> GetSheetsServiceAsync()
@@ -131,7 +217,8 @@ namespace ChurchFacilityManagement.Services
 
             try
             {
-                request.Id = await GetNextIdAsync();
+                // Use the static counter cell to get a (safer) next Id
+                request.Id = await GetAndIncrementLastRowIdAsync();
                 request.ReportDate = DateTime.Now;
 
                 var range = $"{TASKS_SHEET}!A:P";
@@ -164,6 +251,8 @@ namespace ChurchFacilityManagement.Services
                 var appendRequest = service.Spreadsheets.Values.Append(valueRange, spreadsheetId, range);
                 appendRequest.ValueInputOption = SpreadsheetsResource.ValuesResource.AppendRequest.ValueInputOptionEnum.RAW;
                 await appendRequest.ExecuteAsync();
+                
+                await WriteLogAsync("Add", request.Id, true);
 
                 _logger.LogInformation($"Created new request with ID: {request.Id}");
                 return request.Id;
@@ -171,8 +260,147 @@ namespace ChurchFacilityManagement.Services
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error creating maintenance request");
+                await WriteLogAsync("Add", request.Id, false, ex.Message);
                 return 0;
             }
+        }
+
+        // New helper: read a static value by key from StaticValues sheet (A=Description, B=Value)
+        private async Task<string?> GetStaticValueAsync(string key)
+        {
+            var service = await GetSheetsServiceAsync();
+            var spreadsheetId = _configuration["GoogleSheets:SpreadsheetId"];
+            var range = $"{STATIC_VALUES_SHEET}!A2:B";
+            var request = service.Spreadsheets.Values.Get(spreadsheetId, range);
+            var response = await request.ExecuteAsync();
+            var values = response.Values;
+
+            if (values != null)
+            {
+                int row = 2;
+                foreach (var r in values)
+                {
+                    if (r.Count > 0 && string.Equals(r[0]?.ToString(), key, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return r.Count > 1 ? r[1]?.ToString() : null;
+                    }
+                    row++;
+                }
+            }
+
+            return null;
+        }
+
+        // New helper: set/update a static value (updates B column for matching A, or appends)
+        private async Task SetStaticValueAsync(string key, string value)
+        {
+            var service = await GetSheetsServiceAsync();
+            var spreadsheetId = _configuration["GoogleSheets:SpreadsheetId"];
+
+            // Read existing rows to find the key
+            var getRange = $"{STATIC_VALUES_SHEET}!A2:B";
+            var getRequest = service.Spreadsheets.Values.Get(spreadsheetId, getRange);
+            var getResp = await getRequest.ExecuteAsync();
+            var values = getResp.Values;
+
+            int rowNum = 2;
+            if (values != null)
+            {
+                foreach (var row in values)
+                {
+                    if (row.Count > 0 && string.Equals(row[0]?.ToString(), key, StringComparison.OrdinalIgnoreCase))
+                    {
+                        // Update column B for this row
+                        var updateRange = $"{STATIC_VALUES_SHEET}!B{rowNum}";
+                        var vr = new ValueRange { Values = new List<IList<object>> { new List<object> { value } } };
+                        var updateRequest = service.Spreadsheets.Values.Update(vr, spreadsheetId, updateRange);
+                        updateRequest.ValueInputOption = SpreadsheetsResource.ValuesResource.UpdateRequest.ValueInputOptionEnum.RAW;
+                        await updateRequest.ExecuteAsync();
+                        return;
+                    }
+                    rowNum++;
+                }
+            }
+
+            // Not found — append a new row
+            var appendRange = $"{STATIC_VALUES_SHEET}!A:B";
+            var appendVr = new ValueRange { Values = new List<IList<object>> { new List<object> { key, value } } };
+            var appendRequest = service.Spreadsheets.Values.Append(appendVr, spreadsheetId, appendRange);
+            appendRequest.ValueInputOption = SpreadsheetsResource.ValuesResource.AppendRequest.ValueInputOptionEnum.RAW;
+            await appendRequest.ExecuteAsync();
+        }
+
+        // New helper: compute next id by scanning Tasks sheet (used as fallback)
+        private async Task<int> GetNextIdFromSheetAsync()
+        {
+            var service = await GetSheetsServiceAsync();
+            var spreadsheetId = _configuration["GoogleSheets:SpreadsheetId"];
+            var range = $"{TASKS_SHEET}!A2:A";
+            var request = service.Spreadsheets.Values.Get(spreadsheetId, range);
+            var response = await request.ExecuteAsync();
+            var values = response.Values;
+
+            int max = 0;
+            if (values != null)
+            {
+                foreach (var row in values)
+                {
+                    if (row.Count > 0 && int.TryParse(row[0]?.ToString(), out var id) && id > max)
+                        max = id;
+                }
+            }
+
+            return max + 1;
+        }
+
+        // New helper: attempt to increment LastRowID in StaticValues with retries (best-effort optimistic CAS)
+        private async Task<int> GetAndIncrementLastRowIdAsync()
+        {
+            const int maxAttempts = 5;
+
+            for (int attempt = 0; attempt < maxAttempts; attempt++)
+            {
+                var currentStr = await GetStaticValueAsync("LastRowID");
+                int current = 0;
+                if (!int.TryParse(currentStr, out current))
+                {
+                    // If the static value is missing or invalid, use sheet scan as baseline
+                    current = await GetNextIdFromSheetAsync() - 1;
+                }
+
+                int newId = current + 1;
+
+                // Re-check before writing to reduce race window
+                var checkStr = await GetStaticValueAsync("LastRowID");
+                if (int.TryParse(checkStr, out var checkVal) && checkVal != current)
+                {
+                    // someone else updated in the meantime — retry
+                    await Task.Delay(50 * (attempt + 1));
+                    continue;
+                }
+
+                // Write the incremented value
+                try
+                {
+                    await SetStaticValueAsync("LastRowID", newId.ToString());
+
+                    // Verify the write
+                    var afterStr = await GetStaticValueAsync("LastRowID");
+                    if (int.TryParse(afterStr, out var afterVal) && afterVal == newId)
+                    {
+                        return newId;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Attempt to set LastRowID failed, will retry");
+                }
+
+                await Task.Delay(50 * (attempt + 1));
+            }
+
+            // Fallback: compute by scanning Tasks sheet
+            return await GetNextIdFromSheetAsync();
         }
 
         public async Task<bool> UpdateRequestAsync(MaintenanceRequest request)
@@ -212,12 +440,14 @@ namespace ChurchFacilityManagement.Services
                 var updateRequest = service.Spreadsheets.Values.Update(valueRange, spreadsheetId, range);
                 updateRequest.ValueInputOption = SpreadsheetsResource.ValuesResource.UpdateRequest.ValueInputOptionEnum.RAW;
                 await updateRequest.ExecuteAsync();
+                await WriteLogAsync("Change", request.Id, true);
 
                 _logger.LogInformation($"Updated request ID: {request.Id}");
                 return true;
             }
             catch (Exception ex)
             {
+                await WriteLogAsync("Change", request.Id, false, ex.Message);
                 _logger.LogError(ex, $"Error updating request ID: {request.Id}");
                 return false;
             }
@@ -320,11 +550,14 @@ namespace ChurchFacilityManagement.Services
 
                 await DeleteRequestAsync(id);
 
+                await WriteLogAsync("Delete", id, true, null);
+
                 _logger.LogInformation($"Moved request ID {id} to completed");
                 return true;
             }
             catch (Exception ex)
             {
+                await WriteLogAsync("Delete", id, false, ex.Message);
                 _logger.LogError(ex, $"Error moving request ID {id} to completed");
                 return false;
             }
